@@ -141,6 +141,7 @@
     <!-- VIEW SELECTOR BAR -->
     <div class="bg-slate-800 p-1 rounded-lg border border-slate-700 mb-3 flex gap-1">
       <button onclick="switchView('pitch')" id="nav-pitch" class="flex-1 py-2 text-center font-bold text-xs rounded bg-emerald-600 text-white shadow">🏟️ Pitch & Lineup</button>
+      <button onclick="switchView('splitter')" id="nav-splitter" class="flex-1 py-2 text-center font-bold text-xs rounded bg-slate-900 text-slate-400">📋 Squad Splitter</button>
       <button onclick="switchView('stats')" id="nav-stats" class="flex-1 py-2 text-center font-bold text-xs rounded bg-slate-900 text-slate-400">📊 Squad & Stats</button>
     </div>
 
@@ -225,6 +226,61 @@
       <div class="flex gap-2 pb-6">
         <button onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
         <button onclick="exportTeamSheet()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
+      </div>
+    </div>
+
+    <!-- VIEW 3: AGE-GROUP MATCHDAY SQUAD SPLITTER (Milestone 8: 25 Kids -> 3 Teams) -->
+    <div id="view-splitter" class="hidden pb-12 space-y-3">
+      <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+        <div class="flex justify-between items-start gap-2">
+          <div>
+            <h3 id="splitterAgeGroupTitle" class="text-sm font-bold text-emerald-400">📋 U10 Matchday Squad Splitter</h3>
+            <p id="splitterSubtitle" class="text-[11px] text-slate-400">Divide your age-group pool across matchday teams & coaches</p>
+          </div>
+        </div>
+
+        <!-- Quick Actions: Auto-Split & Reset -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="autoSplitAgeGroupPlayers()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+            🪄 Auto-Split Evenly
+          </button>
+          <button onclick="resetSplitterToPrimary()" class="bg-slate-700 hover:bg-slate-600 py-2 px-2.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-1">
+            🔄 Reset to Primary
+          </button>
+        </div>
+
+        <!-- Need a 3rd / 4th team for this age group? Quick Add -->
+        <div class="flex gap-1.5 pt-2 border-t border-slate-700/70">
+          <input type="text" id="splitterNewTeamInput" placeholder="Need another team? e.g. U10 Blue" class="flex-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-700 text-xs text-white">
+          <button onclick="handleQuickAddAgeGroupTeam()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded font-bold text-xs">+ Add Team</button>
+        </div>
+      </div>
+
+      <!-- Team Summary Cards & Opposition Inputs -->
+      <div id="splitterTeamCards" class="space-y-2"></div>
+
+      <!-- Publish & WhatsApp Actions -->
+      <div class="bg-slate-800 p-3 rounded-lg border border-emerald-500/40 space-y-2.5">
+        <label class="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+          <input type="checkbox" id="splitterAutoGenLineupsCheckbox" checked class="rounded bg-slate-900 border-slate-600 text-emerald-500">
+          <span>⚡ Also auto-generate fair starting lineups for each team on publish</span>
+        </label>
+        <div class="flex gap-2">
+          <button onclick="handlePublishSquadSplit()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold text-xs shadow">
+            🚀 Publish Squads to Coaches
+          </button>
+          <button onclick="copySquadSplitWhatsApp()" class="bg-slate-700 hover:bg-slate-600 px-3 py-2.5 rounded-lg font-bold text-xs" title="Copy formatted squad split for WhatsApp">
+            📋 WhatsApp
+          </button>
+        </div>
+      </div>
+
+      <!-- Attendance & Team Assignment Roll Call -->
+      <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
+        <div class="flex justify-between items-center">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Tap to Assign Team or Mark 🚫 Off</h4>
+        </div>
+        <div id="splitterPlayerRollCall" class="space-y-1.5"></div>
       </div>
     </div>
 

@@ -410,7 +410,8 @@ export const appState = {
   selectedDate: new Date().toISOString().split('T')[0],
   currentQuarter: 1,
   players: [], // All players in club/ageGroup
-  matchesByTeam: {}, // { [matchId]: matchDoc }
+  allMatches: {}, // { [matchId]: matchDoc } across all club teams
+  matchesByTeam: {}, // { [matchId]: matchDoc } for selectedTeamId
   lineupsByMatch: {}, // { [matchId]: { 1: lineupDoc, 2: lineupDoc, 3: lineupDoc, 4: lineupDoc } }
   sameDateLineupsAllTeams: [] // Used for real-time shared player conflict warnings
 };
@@ -486,6 +487,7 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   }
 
   appState.players = Object.values(store.players || {});
+  appState.allMatches = { ...(store.matches || {}) };
   appState.matchesByTeam = {};
   Object.values(store.matches || {}).forEach(m => {
     if (m.teamId === appState.selectedTeamId) {
@@ -683,13 +685,16 @@ export function startFirestoreSubscriptions(firebaseUser) {
   // 5. Subscribe to Matches & Lineups
   activeUnsubscribes.push(
     onSnapshot(collection(db, 'matches'), snap => {
+      const allM = {};
       const byTeam = {};
       snap.docs.forEach(d => {
         const data = d.data();
+        allM[data.matchId] = data;
         if (data.teamId === appState.selectedTeamId) {
           byTeam[data.matchId] = data;
         }
       });
+      appState.allMatches = allM;
       appState.matchesByTeam = byTeam;
       notifyAppState();
     })
@@ -1266,6 +1271,207 @@ export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7',
   }
 
   return newTeam;
+}
+
+/**
+ * Milestone 8: Publish Age-Group Matchday Squad Split (e.g. 25 kids -> 3 teams for 3 coaches)
+ */
+export async function publishAgeGroupSquadSplit({
+  dateStr,
+  ageGroupTeams = [],
+  ageGroupPlayers = [],
+  assignmentsByPlayerId = {},
+  oppositionByTeamId = {},
+  autoGenerateLineups = true
+}) {
+  const { db } = getFirebaseServices();
+  const isFirebase = appState.mode === 'firebase' && db;
+  const store = isFirebase ? null : loadLocalStore();
+
+  const allTeamIdsInAgeGroup = ageGroupTeams.map(t => t.teamId);
+
+  // 1. Ensure any player assigned to a team this week has that team in `allowedTeamIds`
+  for (const player of ageGroupPlayers) {
+    const assignedTeamId = assignmentsByPlayerId[player.playerId];
+    const currentAllowed = new Set(player.allowedTeamIds || [player.primaryTeamId]);
+    // Share across all teams in the age group so the splitter works seamlessly week to week
+    allTeamIdsInAgeGroup.forEach(tId => currentAllowed.add(tId));
+    if (assignedTeamId && assignedTeamId !== 'OFF') {
+      currentAllowed.add(assignedTeamId);
+    }
+    const updatedAllowed = Array.from(currentAllowed);
+    if (updatedAllowed.length !== (player.allowedTeamIds || []).length) {
+      player.allowedTeamIds = updatedAllowed;
+      if (isFirebase) {
+        await setDoc(
+          doc(db, 'players', player.playerId),
+          { allowedTeamIds: updatedAllowed },
+          { merge: true }
+        );
+      } else if (store.players[player.playerId]) {
+        store.players[player.playerId].allowedTeamIds = updatedAllowed;
+      }
+    }
+  }
+
+  // Build preferredGroup map by display name
+  const preferredMap = {};
+  ageGroupPlayers.forEach(p => {
+    preferredMap[getPlayerDisplayName(p)] = p.preferredGroup || 'ANY';
+  });
+
+  // 2. For each team in the age group, update its Match doc & Period Lineup docs for `dateStr`
+  for (const team of ageGroupTeams) {
+    const tId = team.teamId;
+    const matchId = getMatchId(tId, dateStr);
+    const existingMatch = appState.allMatches[matchId] || {};
+    const formation = existingMatch.formation || team.defaultFormation || '7v7';
+    const periodCount = Number(existingMatch.periodCount) || Number(team.defaultPeriods) || 4;
+    const defaultShape = getDefaultShapeForFormat(formation);
+    const tacticalShape = existingMatch.tacticalShape || defaultShape;
+    const qtrMins = parseFloat(existingMatch.qtrMins) || team.defaultQtrMins || 12;
+    const opposition =
+      oppositionByTeamId[tId] !== undefined
+        ? oppositionByTeamId[tId].trim()
+        : existingMatch.opposition || '';
+
+    const assignedPlayers = ageGroupPlayers
+      .filter(p => assignmentsByPlayerId[p.playerId] === tId)
+      .map(p => getPlayerDisplayName(p));
+
+    // Every other player in the age group (assigned to another team or marked OFF) is unavailable for THIS team today
+    const unavailableForThisTeam = ageGroupPlayers
+      .filter(p => assignmentsByPlayerId[p.playerId] !== tId)
+      .map(p => getPlayerDisplayName(p));
+
+    const matchDoc = {
+      ...existingMatch,
+      matchId,
+      teamId: tId,
+      date: dateStr,
+      opposition,
+      qtrMins,
+      periodCount,
+      formation,
+      tacticalShape,
+      matchdaySquad: assignedPlayers,
+      updatedAt: new Date().toISOString(),
+      updatedBy: appState.currentUser?.uid || 'local_coach_1'
+    };
+
+    if (isFirebase) {
+      await setDoc(doc(db, 'matches', matchId), matchDoc, { merge: true });
+    } else {
+      store.matches[matchId] = matchDoc;
+    }
+
+    const periods = periodCount === 2 ? [1, 2] : periodCount === 3 ? [1, 2, 3] : [1, 2, 3, 4];
+    const teamSize = FORMAT_SIZES[formation] || 7;
+    const tracking = {};
+    assignedPlayers.forEach(pName => {
+      tracking[pName] = { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+    });
+
+    for (const q of periods) {
+      const lineupId = getLineupId(matchId, q);
+      const existingLineupDoc = (appState.lineupsByMatch[matchId] || {})[q] || {};
+      const qShape = existingLineupDoc.tacticalShape || tacticalShape;
+      const activePositions = getPositionsForFormatAndShape(formation, qShape);
+
+      let newLineup = { ...(existingLineupDoc.lineup || {}) };
+      // Remove any player from existing lineup who is no longer assigned to this team today
+      const assignedSet = new Set(assignedPlayers);
+      Object.keys(newLineup).forEach(posId => {
+        if (!assignedSet.has(newLineup[posId])) {
+          delete newLineup[posId];
+        }
+      });
+
+      // Auto-generate fair lineup if requested and team has enough assigned players
+      if (autoGenerateLineups && assignedPlayers.length >= teamSize) {
+        const sortedAvailable = [...assignedPlayers].sort((a, b) => {
+          if (tracking[a].totalQtrs !== tracking[b].totalQtrs) {
+            return tracking[a].totalQtrs - tracking[b].totalQtrs;
+          }
+          return Math.random() - 0.5;
+        });
+
+        const starters = sortedAvailable.slice(0, teamSize);
+        newLineup = {};
+
+        const specGKs = sortedAvailable
+          .filter(p => preferredMap[p] === 'GK')
+          .sort((a, b) => tracking[a].GK - tracking[b].GK);
+
+        if (specGKs.length > 0) {
+          const chosenGK = specGKs[0];
+          if (!starters.includes(chosenGK)) {
+            for (let i = starters.length - 1; i >= 0; i--) {
+              if (preferredMap[starters[i]] !== 'GK') {
+                starters[i] = chosenGK;
+                break;
+              }
+            }
+          }
+          newLineup.GK = chosenGK;
+          tracking[chosenGK].GK++;
+        } else {
+          starters.sort((a, b) => tracking[a].GK - tracking[b].GK);
+          newLineup.GK = starters[0];
+          tracking[starters[0]].GK++;
+        }
+
+        let remaining = starters.filter(p => p !== newLineup.GK);
+        const zonePrio = (pName, target) => {
+          const pref = preferredMap[pName] || 'ANY';
+          return pref === target ? 0 : pref === 'ANY' ? 1 : 2;
+        };
+
+        ['ATT', 'DEF', 'MID'].forEach(groupName => {
+          const slots = activePositions.filter(pos => pos.group === groupName);
+          if (slots.length > 0) {
+            remaining.sort((a, b) => {
+              const d = zonePrio(a, groupName) - zonePrio(b, groupName);
+              return d !== 0 ? d : tracking[a][groupName] - tracking[b][groupName];
+            });
+            slots.forEach((slot, idx) => {
+              if (remaining[idx]) {
+                newLineup[slot.id] = remaining[idx];
+                tracking[remaining[idx]][groupName]++;
+              }
+            });
+            remaining = remaining.slice(slots.length);
+          }
+        });
+
+        starters.forEach(pName => {
+          tracking[pName].totalQtrs++;
+        });
+      }
+
+      const lineupDoc = {
+        lineupId,
+        matchId,
+        teamId: tId,
+        date: dateStr,
+        quarter: q,
+        tacticalShape: qShape,
+        lineup: newLineup,
+        unavailablePlayers: unavailableForThisTeam,
+        swaps: existingLineupDoc.swaps || []
+      };
+
+      if (isFirebase) {
+        await setDoc(doc(db, 'lineups', lineupId), lineupDoc, { merge: true });
+      } else {
+        store.lineups[lineupId] = lineupDoc;
+      }
+    }
+  }
+
+  if (!isFirebase && store) {
+    saveLocalStore(store);
+  }
 }
 
 /**
