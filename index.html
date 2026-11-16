@@ -24,6 +24,8 @@
           <option value="5v5">5 v 5</option>
           <option value="6v6">6 v 6</option>
           <option value="7v7" selected>7 v 7</option>
+          <option value="9v9">9 v 9</option>
+          <option value="11v11">11 v 11</option>
         </select>
       </div>
     </div>
@@ -77,6 +79,8 @@
               <option value="5v5">5v5</option>
               <option value="6v6">6v6</option>
               <option value="7v7" selected>7v7</option>
+              <option value="9v9">9v9</option>
+              <option value="11v11">11v11</option>
             </select>
             <button onclick="handleCreateTeamUI()" class="bg-sky-600 hover:bg-sky-500 px-2.5 py-1 rounded font-bold text-[11px]">+ Team</button>
           </div>
@@ -144,11 +148,22 @@
     <!-- VIEW 1: MATCH PITCH -->
     <div id="view-pitch">
       <!-- Quarter Selector -->
-      <div class="grid grid-cols-4 gap-2 mb-3">
+      <div class="grid grid-cols-4 gap-2 mb-2.5">
         <button onclick="setQuarter(1)" id="qbtn-1" class="q-btn py-2 rounded font-bold bg-emerald-600 text-white text-sm shadow">Q1</button>
         <button onclick="setQuarter(2)" id="qbtn-2" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q2</button>
         <button onclick="setQuarter(3)" id="qbtn-3" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q3</button>
         <button onclick="setQuarter(4)" id="qbtn-4" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q4</button>
+      </div>
+
+      <!-- Per-Quarter Tactical Shape Bar (Milestone 6) -->
+      <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-2 mb-2.5 flex items-center justify-between gap-2 text-xs">
+        <span id="tacticalShapeQuarterLabel" class="font-bold text-slate-300">Q1 Formation:</span>
+        <select id="tacticalShapeSelect" onchange="onTacticalShapeChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
+          <option value="GK-2-3-1">📐 GK-2-3-1</option>
+        </select>
+        <button onclick="applyShapeToAllQuarters()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1 rounded font-semibold text-[11px] border border-slate-600" title="Apply this tactical formation to all 4 quarters">
+          Apply Q1–Q4
+        </button>
       </div>
 
       <!-- Action Toolbar (Auto-Fill & Swaps) -->
@@ -361,7 +376,7 @@
   </div>
 
   <!-- Hidden Printable Card for Image Export -->
-  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[600px] bg-slate-900 p-6 text-white font-sans">
+  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[720px] bg-slate-900 p-6 text-white font-sans">
     <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
       <div>
         <h1 class="text-2xl font-bold text-emerald-400" id="exportTitleText">Straffan AFC Team Sheet</h1>

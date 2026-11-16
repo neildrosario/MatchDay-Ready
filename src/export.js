@@ -25,9 +25,13 @@ export async function exportTeamSheet() {
   if (dateEl) {
     dateEl.innerText = `Date: ${dateStr} | Format: ${match.formation || '7v7'} (${match.qtrMins}m/q)`;
   }
-  if (fmtEl) fmtEl.innerText = `Formation: ${match.formation || '7v7'}`;
 
-  const activePositions = getActivePositions();
+  const qShapes = [1, 2, 3, 4].map(q => getQuarterLineupDoc(q).tacticalShape);
+  const uniqueShapes = Array.from(new Set(qShapes));
+  if (fmtEl) {
+    fmtEl.innerText = `${match.formation || '7v7'} • ${uniqueShapes.join(' / ')}`;
+  }
+
   const playerNames = getTeamPlayers(team.teamId).map(p => getPlayerDisplayName(p));
 
   if (grid) {
@@ -41,51 +45,67 @@ export async function exportTeamSheet() {
         const unavailList = Array.from(unavailSet);
         const swaps = qObj.swaps || [];
 
-        const gk = qData.GK || '-';
-        const defs =
-          activePositions
-            .filter(p => p.group === 'DEF')
-            .map(p => qData[p.id])
-            .filter(Boolean)
-            .join(', ') || '-';
-        const mids =
-          activePositions
-            .filter(p => p.group === 'MID')
-            .map(p => qData[p.id])
-            .filter(Boolean)
-            .join(', ') || '-';
-        const att =
-          activePositions
-            .filter(p => p.group === 'ATT')
-            .map(p => qData[p.id])
-            .filter(Boolean)
-            .join(', ') || '-';
+        // Get this specific quarter's active positions & rows
+        const activePositions = getActivePositions(q);
+        const rows = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+        activePositions.forEach(pos => {
+          if (!rows[pos.row]) rows[pos.row] = [];
+          rows[pos.row].push(pos);
+        });
+
+        // Build mini tactical pitch graphic for this quarter's exact formation shape
+        const miniPitchRowsHtml = [1, 2, 3, 4, 5]
+          .filter(r => rows[r] && rows[r].length > 0)
+          .map(r => {
+            const pills = rows[r]
+              .map(pos => {
+                const pName = qData[pos.id] || '-';
+                return `
+                  <div class="flex-1 min-w-0 bg-slate-900/90 border border-white/25 rounded px-1 py-0.5 text-center">
+                    <div class="text-[8px] font-bold ${pos.color} text-white rounded-sm px-1 leading-tight">${pos.label}</div>
+                    <div class="text-[10px] font-semibold text-white truncate mt-0.5">${pName}</div>
+                  </div>
+                `;
+              })
+              .join('');
+            return `<div class="flex justify-around items-center gap-1 w-full">${pills}</div>`;
+          })
+          .join('');
 
         return `
-        <div class="bg-slate-800 rounded-lg p-3 border border-slate-700">
-          <div class="font-bold text-emerald-400 border-b border-slate-700 pb-1 mb-2">Quarter ${q}</div>
-          <div class="text-xs space-y-1 mb-2">
-            <div><span class="text-purple-400 font-bold w-10 inline-block">GK:</span> ${gk}</div>
-            <div><span class="text-sky-400 font-bold w-10 inline-block">DEF:</span> ${defs}</div>
-            <div><span class="text-amber-400 font-bold w-10 inline-block">MID:</span> ${mids}</div>
-            <div><span class="text-rose-400 font-bold w-10 inline-block">ATT:</span> ${att}</div>
+        <div class="bg-slate-800 rounded-lg p-3 border border-slate-700 flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center border-b border-slate-700 pb-1.5 mb-2">
+              <span class="font-bold text-emerald-400 text-sm">Quarter ${q}</span>
+              <span class="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded">
+                📐 ${qObj.tacticalShape}
+              </span>
+            </div>
+
+            <!-- Dynamic Mini Pitch reflecting Quarter Formation -->
+            <div class="pitch-bg relative rounded-lg border-2 border-white/60 p-2 mb-2.5 space-y-1.5">
+              ${miniPitchRowsHtml}
+            </div>
           </div>
-          ${
-            swaps.length > 0
-              ? `<div class="text-[10px] text-amber-300 mb-1 border-t border-slate-700 pt-1"><strong>Swaps:</strong> ${swaps
-                  .map(s => s.text)
-                  .join('; ')}</div>`
-              : ''
-          }
-          <div class="text-[11px] text-slate-400 border-t border-slate-700 pt-1 space-y-0.5">
-            <div><strong>Subs:</strong> ${subs.join(', ') || 'None'}</div>
+
+          <div>
             ${
-              unavailList.length > 0
-                ? `<div class="text-rose-300"><strong>Resting This Week:</strong> ${unavailList.join(
-                    ', '
-                  )}</div>`
+              swaps.length > 0
+                ? `<div class="text-[10px] text-amber-300 mb-1.5 border-t border-slate-700 pt-1"><strong>🔄 Swaps:</strong> ${swaps
+                    .map(s => s.text)
+                    .join('; ')}</div>`
                 : ''
             }
+            <div class="text-[11px] text-slate-300 border-t border-slate-700 pt-1.5 space-y-0.5">
+              <div><strong class="text-slate-400">Subs (${subs.length}):</strong> ${subs.join(', ') || 'None'}</div>
+              ${
+                unavailList.length > 0
+                  ? `<div class="text-rose-300"><strong>Resting:</strong> ${unavailList.join(
+                      ', '
+                    )}</div>`
+                  : ''
+              }
+            </div>
           </div>
         </div>
       `;

@@ -1,5 +1,5 @@
 import {
-  FORMATIONS,
+  getPositionsForFormatAndShape,
   appState,
   getSelectedTeam,
   getTeamPlayers,
@@ -49,11 +49,7 @@ export function renderStats() {
   matchIdsToCount.forEach(mId => {
     const matchDoc = appState.matchesByTeam[mId] || getCurrentMatchDoc();
     const qtrMins = parseFloat(matchDoc.qtrMins) || currentTeam.defaultQtrMins || 12;
-    const activePositions = FORMATIONS[matchDoc.formation || '7v7'] || FORMATIONS['7v7'];
-    const posGroupMap = {};
-    activePositions.forEach(pos => {
-      posGroupMap[pos.id] = pos.group;
-    });
+    const format = matchDoc.formation || '7v7';
 
     const quartersMap = appState.lineupsByMatch[mId] || {};
     [1, 2, 3, 4].forEach(q => {
@@ -61,6 +57,15 @@ export function renderStats() {
       if (!qObj) return;
       const qData = qObj.lineup || {};
       const swaps = qObj.swaps || [];
+
+      const activePositions = getPositionsForFormatAndShape(
+        format,
+        qObj.tacticalShape || matchDoc.tacticalShape
+      );
+      const posGroupMap = {};
+      activePositions.forEach(pos => {
+        posGroupMap[pos.id] = pos.group;
+      });
 
       activePositions.forEach(pos => {
         const pName = qData[pos.id];

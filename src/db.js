@@ -16,31 +16,299 @@ import {
   DEFAULT_CLUB_FULL_NAME
 } from './firebase.js';
 
+export const FORMAT_SIZES = {
+  '5v5': 5,
+  '6v6': 6,
+  '7v7': 7,
+  '9v9': 9,
+  '11v11': 11
+};
+
+export const FORMATIONS_BY_FORMAT = {
+  '5v5': {
+    'GK-2-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
+    ],
+    'GK-1-2-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-1-3': [
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 1 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 1 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 1 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
+    ],
+    'GK-3-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 2 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
+    ]
+  },
+  '6v6': {
+    'GK-2-2-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'CM1', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM2', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-1-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-2-1-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-1-3-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ]
+  },
+  '7v7': {
+    'GK-2-3-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-2-1': [
+      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-2-1-3': [
+      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-2-2-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-1-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ]
+  },
+  '9v9': {
+    'GK-3-3-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-2-3': [
+      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-4-1': [
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-2-4-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-4-3-1': [
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-2-3-3': [
+      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ]
+  },
+  '11v11': {
+    'GK-4-3-3': [
+      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-4-4-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-4-2-3-1': [
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LAM', label: 'LAM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CAM', label: 'CAM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RAM', label: 'RAM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCDM', label: 'LCDM', group: 'MID', color: 'bg-amber-700', row: 3 },
+      { id: 'RCDM', label: 'RCDM', group: 'MID', color: 'bg-amber-700', row: 3 },
+      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 4 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 4 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 4 },
+      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 4 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 5 }
+    ],
+    'GK-3-5-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LWB', label: 'LWB', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RWB', label: 'RWB', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-3-4-3': [
+      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ],
+    'GK-5-3-2': [
+      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
+      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
+      { id: 'LWB', label: 'LWB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'RWB', label: 'RWB', group: 'DEF', color: 'bg-sky-600', row: 3 },
+      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
+    ]
+  }
+};
+
+export function getDefaultShapeForFormat(format = '7v7') {
+  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
+  return Object.keys(shapes)[0];
+}
+
+export function getAvailableShapesForFormat(format = '7v7') {
+  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
+  return Object.keys(shapes);
+}
+
+export function getPositionsForFormatAndShape(format = '7v7', shape = null) {
+  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
+  const resolvedShape = shape && shapes[shape] ? shape : Object.keys(shapes)[0];
+  return shapes[resolvedShape];
+}
+
+// Legacy alias for any module expecting FORMATIONS[format]
 export const FORMATIONS = {
-  '5v5': [
-    { id: 'CM1', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 1 },
-    { id: 'CM2', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 1 },
-    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',   row: 2 },
-    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',   row: 2 },
-    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600',row: 3 }
-  ],
-  '6v6': [
-    { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-    { id: 'CM1', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 2 },
-    { id: 'CM2', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 2 },
-    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',   row: 3 },
-    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',   row: 3 },
-    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600',row: 4 }
-  ],
-  '7v7': [
-    { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-    { id: 'LM',  label: 'LM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
-    { id: 'CM',  label: 'CM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
-    { id: 'RM',  label: 'RM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
-    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',    row: 3 },
-    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',    row: 3 },
-    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600', row: 4 }
-  ]
+  '5v5': FORMATIONS_BY_FORMAT['5v5']['GK-2-2'],
+  '6v6': FORMATIONS_BY_FORMAT['6v6']['GK-2-2-1'],
+  '7v7': FORMATIONS_BY_FORMAT['7v7']['GK-2-3-1'],
+  '9v9': FORMATIONS_BY_FORMAT['9v9']['GK-3-3-2'],
+  '11v11': FORMATIONS_BY_FORMAT['11v11']['GK-4-3-3']
 };
 
 const LOCAL_CLUB_STORE_KEY = 'matchday_club_store_v3';
@@ -521,34 +789,55 @@ export function getPlayerDisplayName(playerObjOrName) {
 export function getCurrentMatchDoc() {
   const team = getSelectedTeam();
   const matchId = getMatchId(team.teamId, appState.selectedDate);
+  const existing = appState.matchesByTeam[matchId];
+  const formation = existing?.formation || team.defaultFormation || '7v7';
+  const defaultShape = getDefaultShapeForFormat(formation);
+  const validShapes = getAvailableShapesForFormat(formation);
+  const tacticalShape =
+    existing?.tacticalShape && validShapes.includes(existing.tacticalShape)
+      ? existing.tacticalShape
+      : defaultShape;
+
   return (
-    appState.matchesByTeam[matchId] || {
-      matchId,
-      teamId: team.teamId,
-      date: appState.selectedDate,
-      opposition: '',
-      qtrMins: team.defaultQtrMins || 12,
-      formation: team.defaultFormation || '7v7'
-    }
+    existing
+      ? { ...existing, formation, tacticalShape }
+      : {
+          matchId,
+          teamId: team.teamId,
+          date: appState.selectedDate,
+          opposition: '',
+          qtrMins: team.defaultQtrMins || 12,
+          formation,
+          tacticalShape
+        }
   );
 }
 
 export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdInput = null) {
   const team = getSelectedTeam();
-  const matchId = matchIdInput || getMatchId(team.teamId, appState.selectedDate);
+  const match = getCurrentMatchDoc();
+  const matchId = matchIdInput || match.matchId;
   const byQ = appState.lineupsByMatch[matchId] || {};
-  return (
-    byQ[quarter] || {
-      lineupId: getLineupId(matchId, quarter),
-      matchId,
-      teamId: team.teamId,
-      date: appState.selectedDate,
-      quarter,
-      lineup: {},
-      unavailablePlayers: [],
-      swaps: []
-    }
-  );
+  const existingQ = byQ[quarter];
+  const validShapes = getAvailableShapesForFormat(match.formation || '7v7');
+  const resolvedShape =
+    existingQ?.tacticalShape && validShapes.includes(existingQ.tacticalShape)
+      ? existingQ.tacticalShape
+      : match.tacticalShape || getDefaultShapeForFormat(match.formation || '7v7');
+
+  return existingQ
+    ? { ...existingQ, tacticalShape: resolvedShape }
+    : {
+        lineupId: getLineupId(matchId, quarter),
+        matchId,
+        teamId: team.teamId,
+        date: appState.selectedDate,
+        quarter,
+        tacticalShape: resolvedShape,
+        lineup: {},
+        unavailablePlayers: [],
+        swaps: []
+      };
 }
 
 /**

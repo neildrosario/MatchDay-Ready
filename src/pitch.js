@@ -1,5 +1,8 @@
 import {
-  FORMATIONS,
+  FORMAT_SIZES,
+  getDefaultShapeForFormat,
+  getAvailableShapesForFormat,
+  getPositionsForFormatAndShape,
   appState,
   getSelectedTeam,
   getTeamPlayers,
@@ -13,15 +16,51 @@ import {
   saveQuarterLineup
 } from './db.js';
 
-export function getActivePositions() {
+export function getActivePositions(quarter = appState.currentQuarter) {
   const match = getCurrentMatchDoc();
-  return FORMATIONS[match.formation || '7v7'] || FORMATIONS['7v7'];
+  const qDoc = getQuarterLineupDoc(quarter);
+  return getPositionsForFormatAndShape(match.formation || '7v7', qDoc.tacticalShape);
 }
 
 export function getTeamSize() {
   const match = getCurrentMatchDoc();
-  const fmt = match.formation || '7v7';
-  return fmt === '5v5' ? 5 : fmt === '6v6' ? 6 : 7;
+  return FORMAT_SIZES[match.formation || '7v7'] || 7;
+}
+
+/**
+ * Intelligently remaps an existing lineup object from a previous formation shape
+ * into `newPositions` so switching formations mid-match never drops players off the pitch.
+ */
+function remapLineupToNewPositions(oldLineup = {}, newPositions = []) {
+  const newLineup = {};
+  const usedPlayers = new Set();
+  const remainingPlayers = [];
+
+  // 1. Keep exact slot ID matches first (e.g. GK -> GK, LD -> LD)
+  newPositions.forEach(pos => {
+    const existingPlayer = oldLineup[pos.id];
+    if (existingPlayer && !usedPlayers.has(existingPlayer)) {
+      newLineup[pos.id] = existingPlayer;
+      usedPlayers.add(existingPlayer);
+    }
+  });
+
+  // Collect players from oldLineup who weren't placed by exact slot ID
+  Object.values(oldLineup).forEach(pName => {
+    if (pName && !usedPlayers.has(pName)) {
+      remainingPlayers.push(pName);
+      usedPlayers.add(pName);
+    }
+  });
+
+  // 2. Fill any remaining open slots in newPositions with remaining on-pitch players
+  newPositions.forEach(pos => {
+    if (!newLineup[pos.id] && remainingPlayers.length > 0) {
+      newLineup[pos.id] = remainingPlayers.shift();
+    }
+  });
+
+  return newLineup;
 }
 
 export function renderHeaderAndMatchBar() {
@@ -43,6 +82,8 @@ export function renderHeaderAndMatchBar() {
   }
 
   const match = getCurrentMatchDoc();
+  const qDoc = getQuarterLineupDoc(appState.currentQuarter);
+
   const qtrInput = document.getElementById('qtrMins');
   if (qtrInput && document.activeElement !== qtrInput) {
     qtrInput.value = match.qtrMins ?? 12;
@@ -52,6 +93,37 @@ export function renderHeaderAndMatchBar() {
   if (fmtSelect) {
     fmtSelect.value = match.formation || '7v7';
   }
+
+  // Tactical Shape selector for the active quarter
+  const shapeSelect = document.getElementById('tacticalShapeSelect');
+  const shapeQuarterLabel = document.getElementById('tacticalShapeQuarterLabel');
+  if (shapeQuarterLabel) {
+    shapeQuarterLabel.innerText = `Q${appState.currentQuarter} Formation:`;
+  }
+  if (shapeSelect) {
+    const shapes = getAvailableShapesForFormat(match.formation || '7v7');
+    shapeSelect.innerHTML = shapes
+      .map(sh => {
+        const selected = sh === qDoc.tacticalShape ? 'selected' : '';
+        return `<option value="${sh}" ${selected}>📐 ${sh}</option>`;
+      })
+      .join('');
+  }
+
+  // Update Q1-Q4 buttons with each quarter's formation shape subtitle
+  [1, 2, 3, 4].forEach(qNum => {
+    const btn = document.getElementById(`qbtn-${qNum}`);
+    if (btn) {
+      const qLineup = getQuarterLineupDoc(qNum);
+      const isCurrent = qNum === appState.currentQuarter;
+      btn.className = isCurrent
+        ? 'q-btn py-1.5 px-1 rounded font-bold bg-emerald-600 text-white text-xs shadow flex flex-col items-center leading-tight'
+        : 'q-btn py-1.5 px-1 rounded font-bold bg-slate-800 text-slate-300 text-xs flex flex-col items-center leading-tight';
+      btn.innerHTML = `<span>Q${qNum}</span><span class="text-[9px] font-normal ${
+        isCurrent ? 'text-emerald-100' : 'text-slate-400'
+      }">${qLineup.tacticalShape}</span>`;
+    }
+  });
 
   const dateInput = document.getElementById('matchDate');
   if (dateInput && dateInput.value !== appState.selectedDate) {
@@ -78,19 +150,13 @@ export function updateMatchHistoryDropdown() {
   savedMatches.forEach(m => {
     const opp = m.opposition ? ` vs ${m.opposition}` : '';
     const selected = m.date === appState.selectedDate ? 'selected' : '';
-    html += `<option value="${m.date}" ${selected}>📅 ${m.date}${opp}</option>`;
+    html += `<option value="${m.date}" ${selected}>📅 ${m.date}${opp} (${m.formation || '7v7'})</option>`;
   });
   select.innerHTML = html;
 }
 
 export function setQuarter(q) {
   appState.currentQuarter = q;
-  document.querySelectorAll('.q-btn').forEach((btn, idx) => {
-    btn.className =
-      idx + 1 === q
-        ? 'q-btn py-2 rounded font-bold bg-emerald-600 text-white text-sm shadow'
-        : 'q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm';
-  });
   renderPitch();
 }
 
@@ -108,7 +174,53 @@ export async function onConfigQtrMinsChange(val) {
 }
 
 export async function onFormationChange(formation) {
-  await saveMatchMetadata({ formation });
+  const defaultShape = getDefaultShapeForFormat(formation);
+  await saveMatchMetadata({ formation, tacticalShape: defaultShape });
+
+  // Remap existing lineups in all 4 quarters to the new format's default shape
+  const newPositions = getPositionsForFormatAndShape(formation, defaultShape);
+  for (const q of [1, 2, 3, 4]) {
+    const qDoc = getQuarterLineupDoc(q);
+    const hasPlayers = Object.keys(qDoc.lineup || {}).length > 0;
+    if (hasPlayers || qDoc.tacticalShape) {
+      const remapped = remapLineupToNewPositions(qDoc.lineup || {}, newPositions);
+      await saveQuarterLineup(q, {
+        tacticalShape: defaultShape,
+        lineup: remapped
+      });
+    }
+  }
+}
+
+export async function onTacticalShapeChange(newShape) {
+  const match = getCurrentMatchDoc();
+  const q = appState.currentQuarter;
+  const qDoc = getQuarterLineupDoc(q);
+  const newPositions = getPositionsForFormatAndShape(match.formation || '7v7', newShape);
+  const remappedLineup = remapLineupToNewPositions(qDoc.lineup || {}, newPositions);
+
+  await saveQuarterLineup(q, {
+    tacticalShape: newShape,
+    lineup: remappedLineup
+  });
+}
+
+export async function applyShapeToAllQuarters() {
+  const match = getCurrentMatchDoc();
+  const currentQDoc = getQuarterLineupDoc(appState.currentQuarter);
+  const targetShape = currentQDoc.tacticalShape;
+  const newPositions = getPositionsForFormatAndShape(match.formation || '7v7', targetShape);
+
+  await saveMatchMetadata({ tacticalShape: targetShape });
+  for (const q of [1, 2, 3, 4]) {
+    const qDoc = getQuarterLineupDoc(q);
+    const remapped = remapLineupToNewPositions(qDoc.lineup || {}, newPositions);
+    await saveQuarterLineup(q, {
+      tacticalShape: targetShape,
+      lineup: remapped
+    });
+  }
+  alert(`✅ Applied formation ${targetShape} across Q1–Q4!`);
 }
 
 export async function onOppositionInputChange(opposition) {
@@ -154,6 +266,7 @@ export async function toggleUnavailable(playerName) {
 export function renderPitch() {
   renderHeaderAndMatchBar();
 
+  const match = getCurrentMatchDoc();
   const team = getSelectedTeam();
   const teamPlayers = getTeamPlayers(team.teamId);
   const playerNames = teamPlayers.map(p => getPlayerDisplayName(p));
@@ -166,7 +279,16 @@ export function renderPitch() {
   const qData = qObj.lineup || {};
   const unavailSet = new Set(qObj.unavailablePlayers || []);
   const assigned = new Set(Object.values(qData).filter(Boolean));
-  const activePositions = getActivePositions();
+  const activePositions = getActivePositions(q);
+
+  // Adjust pitch container height dynamically for 9v9 / 11v11 or 5-row shapes
+  const pitchContainer = document.getElementById('pitchContainer');
+  if (pitchContainer) {
+    const isLargePitch = match.formation === '9v9' || match.formation === '11v11';
+    pitchContainer.className = `pitch-bg relative rounded-xl border-4 border-white/80 p-3 shadow-xl flex flex-col justify-between mb-3 ${
+      isLargePitch ? 'h-[490px]' : 'h-[440px]'
+    }`;
+  }
 
   // 1. Render Real-Time Shared Player Conflict Warning Banner (Blueprint Section 4.2)
   const conflictBanner = document.getElementById('conflictWarningBanner');
@@ -187,18 +309,25 @@ export function renderPitch() {
     }
   }
 
-  // 2. Render Pitch Slots
+  // 2. Render Pitch Slots (supports up to 5 tactical lines, e.g., GK-4-2-3-1)
   const slotsContainer = document.getElementById('pitchSlots');
   if (slotsContainer) {
-    const rows = { 1: [], 2: [], 3: [], 4: [] };
-    activePositions.forEach(pos => rows[pos.row].push(pos));
+    const rows = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+    activePositions.forEach(pos => {
+      if (!rows[pos.row]) rows[pos.row] = [];
+      rows[pos.row].push(pos);
+    });
 
     let html = '';
-    [1, 2, 3, 4].forEach(rowNum => {
+    [1, 2, 3, 4, 5].forEach(rowNum => {
       const rowPos = rows[rowNum];
       if (!rowPos || rowPos.length === 0) return;
 
-      html += `<div class="flex justify-around items-center px-2 gap-2 w-full">`;
+      const isDenseRow = rowPos.length >= 4;
+      html += `<div class="flex justify-around items-center ${
+        isDenseRow ? 'px-0.5 gap-1' : 'px-2 gap-2'
+      } w-full">`;
+
       rowPos.forEach(pos => {
         const currentVal = qData[pos.id] || '';
         const options = [`<option value="">-- ${pos.label} --</option>`];
@@ -213,10 +342,12 @@ export function renderPitch() {
         });
 
         html += `
-          <div class="flex-1 text-center">
-            <span class="text-[9px] font-bold px-1 py-0.5 rounded-t ${pos.color} text-white block">${pos.label}</span>
+          <div class="flex-1 min-w-0 text-center">
+            <span class="text-[9px] font-bold px-1 py-0.5 rounded-t ${pos.color} text-white block truncate">${pos.label}</span>
             <select data-pos-id="${pos.id}"
-              class="pitch-slot-select w-full bg-slate-900/95 text-white font-semibold text-xs py-1.5 px-0.5 rounded-b border border-white/30 shadow">
+              class="pitch-slot-select w-full bg-slate-900/95 text-white font-semibold ${
+                isDenseRow ? 'text-[10px] py-1' : 'text-xs py-1.5'
+              } px-0.5 rounded-b border border-white/30 shadow truncate">
               ${options.join('')}
             </select>
           </div>
@@ -295,7 +426,7 @@ export function openSwapModal() {
   const qObj = getQuarterLineupDoc(q);
   const qData = qObj.lineup || {};
   const unavailSet = new Set(qObj.unavailablePlayers || []);
-  const activePositions = getActivePositions();
+  const activePositions = getActivePositions(q);
   const team = getSelectedTeam();
   const playerNames = getTeamPlayers(team.teamId).map(p => getPlayerDisplayName(p));
 
@@ -380,7 +511,7 @@ export async function autoGenerateMatch() {
 
   if (playerNames.length < teamSize) {
     alert(
-      `You need at least ${teamSize} players in ${team.name} to auto-generate a ${match.formation} lineup.`
+      `You need at least ${teamSize} players in ${team.name} to auto-generate a ${match.formation} lineup (currently have ${playerNames.length}).`
     );
     return;
   }
@@ -397,10 +528,9 @@ export async function autoGenerateMatch() {
     tracking[p] = { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
   });
 
-  const activePositions = getActivePositions();
-
   for (const q of [1, 2, 3, 4]) {
     const qObj = getQuarterLineupDoc(q);
+    const activePositions = getActivePositions(q);
     const unavailSet = new Set(qObj.unavailablePlayers || []);
     const availablePlayers = playerNames.filter(p => !unavailSet.has(p));
 
@@ -419,58 +549,64 @@ export async function autoGenerateMatch() {
     const startingPlayers = availablePlayers.slice(0, teamSize);
     const newLineup = {};
 
-    // Assign GK
+    // 1. Assign GK
     startingPlayers.sort((a, b) => tracking[a].GK - tracking[b].GK);
     newLineup.GK = startingPlayers[0];
     tracking[startingPlayers[0]].GK++;
 
     let remaining = startingPlayers.filter(p => p !== newLineup.GK);
 
-    // Assign ATT if formation has ATT
-    const hasAtt = activePositions.some(p => p.id === 'ATT');
-    if (hasAtt) {
+    // 2. Assign ATT slots (handles 1, 2, or 3 forwards in any shape)
+    const attSlots = activePositions.filter(p => p.group === 'ATT');
+    if (attSlots.length > 0) {
       remaining.sort((a, b) => tracking[a].ATT - tracking[b].ATT);
-      newLineup.ATT = remaining[0];
-      tracking[remaining[0]].ATT++;
-      remaining = remaining.filter(p => p !== newLineup.ATT);
+      attSlots.forEach((slot, idx) => {
+        if (remaining[idx]) {
+          newLineup[slot.id] = remaining[idx];
+          tracking[remaining[idx]].ATT++;
+        }
+      });
+      remaining = remaining.slice(attSlots.length);
     }
 
-    // Assign DEF (LD, RD)
+    // 3. Assign DEF slots (handles 1, 2, 3, 4, or 5 defenders in any shape)
     const defSlots = activePositions.filter(p => p.group === 'DEF');
     if (defSlots.length > 0) {
       remaining.sort((a, b) => tracking[a].DEF - tracking[b].DEF);
-      if (defSlots[0] && remaining[0]) {
-        newLineup[defSlots[0].id] = remaining[0];
-        tracking[remaining[0]].DEF++;
-      }
-      if (defSlots[1] && remaining[1]) {
-        newLineup[defSlots[1].id] = remaining[1];
-        tracking[remaining[1]].DEF++;
-      }
+      defSlots.forEach((slot, idx) => {
+        if (remaining[idx]) {
+          newLineup[slot.id] = remaining[idx];
+          tracking[remaining[idx]].DEF++;
+        }
+      });
       remaining = remaining.slice(defSlots.length);
     }
 
-    // Assign MID
+    // 4. Assign MID slots (handles remaining midfield slots)
     const midSlots = activePositions.filter(p => p.group === 'MID');
-    midSlots.forEach((slot, idx) => {
-      if (remaining[idx]) {
-        newLineup[slot.id] = remaining[idx];
-        tracking[remaining[idx]].MID++;
-      }
-    });
+    if (midSlots.length > 0) {
+      remaining.sort((a, b) => tracking[a].MID - tracking[b].MID);
+      midSlots.forEach((slot, idx) => {
+        if (remaining[idx]) {
+          newLineup[slot.id] = remaining[idx];
+          tracking[remaining[idx]].MID++;
+        }
+      });
+    }
 
     startingPlayers.forEach(p => {
       tracking[p].totalQtrs++;
     });
 
     await saveQuarterLineup(q, {
+      tacticalShape: qObj.tacticalShape,
       lineup: newLineup,
       unavailablePlayers: qObj.unavailablePlayers || [],
       swaps: []
     });
   }
 
-  alert(`✨ Auto-fair lineup generated for ${team.name}!`);
+  alert(`✨ Auto-fair lineup generated for ${team.name} (${match.formation})!`);
 }
 
 export async function copyPreviousQuarter() {
@@ -478,6 +614,7 @@ export async function copyPreviousQuarter() {
   if (q === 1) return alert('Select Q2, Q3, or Q4 to copy from the previous quarter.');
   const prevQ = getQuarterLineupDoc(q - 1);
   await saveQuarterLineup(q, {
+    tacticalShape: prevQ.tacticalShape,
     lineup: { ...(prevQ.lineup || {}) },
     unavailablePlayers: [...(prevQ.unavailablePlayers || [])],
     swaps: []
