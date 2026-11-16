@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" type="image/svg+xml" href="/icon.svg">
-  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="icon" type="image/jpeg" href="/matchdayready-logo.jpeg">
+  <link rel="apple-touch-icon" href="/matchdayready-logo.jpeg">
   <title>MatchDay Ready — Club Edition (Straffan AFC)</title>
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-12 font-sans">
@@ -17,7 +17,10 @@
   <header class="bg-slate-800 p-3 border-b border-slate-700 sticky top-0 z-20 shadow-md space-y-2">
     <div class="flex flex-wrap justify-between items-center gap-2">
       <div class="flex items-center gap-2">
-        <span class="font-bold text-emerald-400 text-base">⚽ MatchDay Ready</span>
+        <div class="w-9 h-9 rounded-full border-2 border-emerald-400/80 shadow-md shrink-0 bg-emerald-950 overflow-hidden"
+             style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"
+              role="img" aria-label="MatchDay Ready Logo"></div>
+        <span class="font-bold text-emerald-400 text-base">MatchDay Ready</span>
         <span id="clubTitleBadge" class="text-[10px] bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded font-semibold">Straffan AFC</span>
         <span id="syncStatus" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Local Mode</span>
       </div>
@@ -492,9 +495,13 @@
   <div id="authModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl">
       <div class="flex justify-between items-center mb-3">
-        <div>
-          <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">Straffan AFC</span>
-          <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In (Straffan AFC)</h3>
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-full border-2 border-emerald-400/80 shadow shrink-0 bg-emerald-950"
+               style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
+          <div>
+            <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">Straffan AFC</span>
+            <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In (Straffan AFC)</h3>
+          </div>
         </div>
         <button onclick="hideAuthModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
       </div>
@@ -543,10 +550,14 @@
   <!-- Hidden Printable Card for Image Export -->
   <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[860px] pitch-bg p-7 text-white font-sans leading-normal border-4 border-white/90 rounded-2xl">
     <div class="bg-slate-900/95 border-2 border-white/40 rounded-xl px-5 py-4 flex justify-between items-center mb-5 shadow-lg">
-      <div>
-        <div class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-0.5">⚽ MatchDay Ready • Official Team Sheet</div>
-        <h1 class="text-2xl font-extrabold text-white leading-snug" id="exportTitleText">Straffan AFC Team Sheet</h1>
-        <p class="text-emerald-200 text-sm mt-0.5 font-semibold" id="exportDateText"></p>
+      <div class="flex items-center gap-3.5">
+        <div class="w-14 h-14 rounded-full border-2 border-emerald-400/90 shadow-md shrink-0 bg-emerald-950"
+             style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-0.5">MatchDay Ready • Official Team Sheet</div>
+          <h1 class="text-2xl font-extrabold text-white leading-snug" id="exportTitleText">Straffan AFC Team Sheet</h1>
+          <p class="text-emerald-200 text-sm mt-0.5 font-semibold" id="exportDateText"></p>
+        </div>
       </div>
       <div class="bg-emerald-800/80 border border-emerald-400/50 rounded-lg px-4 py-2.5 text-right">
         <div class="text-[11px] uppercase tracking-wider text-emerald-200 font-bold">Format & Tactical Shape</div>
