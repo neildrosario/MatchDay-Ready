@@ -78,7 +78,9 @@ export async function exportTeamSheet() {
           rows[pos.row].push(pos);
         });
 
-        // Build spacious, non-truncating mini tactical pitch rows
+        // Build visual pitch rows with html2canvas-calibrated optical center alignment
+        // Note: html2canvas shifts baseline text down by ~3px inside boxes; using slightly larger bottom padding
+        // than top padding centers text dead-center vertically in the rendered PNG.
         const miniPitchRowsHtml = [1, 2, 3, 4, 5]
           .filter(r => rows[r] && rows[r].length > 0)
           .map(r => {
@@ -86,62 +88,48 @@ export async function exportTeamSheet() {
               .map(pos => {
                 const pName = qData[pos.id] || '—';
                 return `
-                  <div style="flex: 1 1 0%; min-width: 64px;" class="bg-slate-950/90 border border-white/30 rounded-md px-1.5 py-1.5 text-center shadow-sm">
-                    <div class="text-[9px] font-extrabold ${pos.color} text-white rounded px-1.5 py-0.5 inline-block leading-normal mb-0.5">${pos.label}</div>
-                    <div class="text-[11px] font-bold text-white leading-snug break-words">${pName}</div>
+                  <div style="flex: 1 1 0%; min-width: 66px;" class="rounded-lg border-2 border-white/80 shadow-md overflow-hidden bg-white text-slate-900 text-center">
+                    <div style="padding-top: 2px; padding-bottom: 6px; line-height: 1.1;" class="text-[10px] font-extrabold uppercase tracking-wider ${pos.color} text-white text-center block w-full">
+                      ${pos.label}
+                    </div>
+                    <div style="padding: 4px 4px 8px 4px; line-height: 1.15;" class="text-[11px] font-extrabold text-slate-900 text-center break-words bg-white w-full">
+                      ${pName}
+                    </div>
                   </div>
                 `;
               })
               .join('');
-            return `<div class="flex justify-center items-stretch gap-1.5 w-full">${pills}</div>`;
+            return `<div class="relative z-10 flex justify-center items-center gap-2 w-full">${pills}</div>`;
           })
           .join('');
 
-        // Also build crisp positional group summary lines (GK, DEF, MID, ATT)
-        const formatGroupLine = groupName => {
-          const slots = activePositions.filter(p => p.group === groupName);
-          if (slots.length === 0) return null;
-          return slots
-            .map(p => `${p.label}: <strong class="text-white">${qData[p.id] || '—'}</strong>`)
-            .join('  •  ');
-        };
-
-        const gkLine = formatGroupLine('GK');
-        const defLine = formatGroupLine('DEF');
-        const midLine = formatGroupLine('MID');
-        const attLine = formatGroupLine('ATT');
-
         return `
-        <div class="bg-slate-900 rounded-xl p-4 border border-slate-700 flex flex-col justify-between shadow-lg">
-          <div>
-            <!-- Period Header -->
-            <div class="flex justify-between items-center border-b border-slate-700/80 pb-2 mb-3">
-              <span class="font-extrabold text-emerald-400 text-base leading-normal">${periodTitle}</span>
-              <span class="text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-md leading-normal">
+        <div class="pitch-bg relative rounded-xl p-4 border-4 border-white/90 flex flex-col justify-between shadow-xl">
+          <!-- Subtle Pitch Markings inside each Quarter Pitch -->
+          <div class="absolute inset-x-0 top-1/2 border-t-2 border-white/30 pointer-events-none"></div>
+          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border-2 border-white/30 pointer-events-none"></div>
+
+          <div class="relative z-10">
+            <!-- Period Header Banner -->
+            <div class="bg-slate-900/90 border border-white/40 rounded-lg px-3 py-1.5 flex justify-between items-center mb-3 shadow">
+              <span style="padding-bottom: 3px; line-height: 1.1;" class="font-extrabold text-emerald-300 text-base">${periodTitle}</span>
+              <span style="padding: 2px 10px 6px 10px; line-height: 1.1;" class="text-xs font-extrabold bg-emerald-600 text-white border border-white/40 rounded-md text-center">
                 📐 ${qObj.tacticalShape}
               </span>
             </div>
 
-            <!-- Spacious Visual Tactical Pitch -->
-            <div class="pitch-bg relative rounded-lg border-2 border-white/60 p-3 mb-3 space-y-2">
+            <!-- Spacious Green Tactical Pitch Slots -->
+            <div class="py-1 mb-3 space-y-2.5">
               ${miniPitchRowsHtml}
-            </div>
-
-            <!-- Clean Positional List Breakdown (Zero Clipping) -->
-            <div class="bg-slate-950/70 rounded-lg p-2.5 border border-slate-800 text-xs space-y-1.5 mb-3 leading-relaxed">
-              ${attLine ? `<div><span class="text-rose-400 font-extrabold w-10 inline-block">ATT:</span> <span class="text-slate-300">${attLine}</span></div>` : ''}
-              ${midLine ? `<div><span class="text-amber-400 font-extrabold w-10 inline-block">MID:</span> <span class="text-slate-300">${midLine}</span></div>` : ''}
-              ${defLine ? `<div><span class="text-sky-400 font-extrabold w-10 inline-block">DEF:</span> <span class="text-slate-300">${defLine}</span></div>` : ''}
-              ${gkLine ? `<div><span class="text-purple-400 font-extrabold w-10 inline-block">GK:</span> <span class="text-slate-300">${gkLine}</span></div>` : ''}
             </div>
           </div>
 
-          <!-- Period Footer: Events, Swaps, Bench & Resting -->
-          <div class="space-y-1.5 text-xs leading-relaxed border-t border-slate-800 pt-2.5">
+          <!-- High-Contrast Period Footer Box: Bench, Swaps, Highlights & Resting -->
+          <div class="relative z-10 bg-slate-900/95 border border-white/40 rounded-lg p-2.5 space-y-1.5 text-xs leading-relaxed shadow">
             ${
               events.length > 0
-                ? `<div class="bg-emerald-950/40 border border-emerald-500/30 rounded px-2 py-1 text-emerald-200">
-                    <strong class="text-emerald-400">Highlights & Cards:</strong> ${events
+                ? `<div class="bg-emerald-900/60 border border-emerald-400/40 rounded px-2 py-1 text-emerald-100">
+                    <strong class="text-emerald-300">Highlights & Cards:</strong> ${events
                       .map(ev => {
                         const icon = getEventIcon(ev.type);
                         const min = ev.minute ? ` (${ev.minute})` : '';
@@ -155,15 +143,15 @@ export async function exportTeamSheet() {
             }
             ${
               swaps.length > 0
-                ? `<div class="bg-amber-950/40 border border-amber-500/30 rounded px-2 py-1 text-amber-200">
-                    <strong class="text-amber-400">🔄 Mid-Period Swaps:</strong> ${swaps
+                ? `<div class="bg-amber-900/60 border border-amber-400/40 rounded px-2 py-1 text-amber-100">
+                    <strong class="text-amber-300">🔄 Mid-Period Swaps:</strong> ${swaps
                       .map(s => s.text)
                       .join('  •  ')}
                   </div>`
                 : ''
             }
-            <div class="text-slate-300">
-              <strong class="text-slate-400">🪑 Substitutes (${subs.length}):</strong> ${
+            <div class="text-white">
+              <strong class="text-emerald-300">🪑 Substitutes (${subs.length}):</strong> ${
                 subs.length > 0 ? subs.join(', ') : 'None'
               }
             </div>
@@ -188,19 +176,18 @@ export async function exportTeamSheet() {
       "Neil D'Rosario";
     const summaryEventsText =
       allMatchEvents.length > 0
-        ? `Match Events: ${allMatchEvents
+        ? `Match Highlights: ${allMatchEvents
             .map(e => `${getEventIcon(e.type)} ${e.player || ''} (${e.periodShort})`)
             .join(' • ')}`
         : 'Generated with MatchDay Ready • Fair Play & Tactical Rotator';
 
     footerEl.innerHTML = `
-      <div><strong>Manager / Coach:</strong> ${coachName} (${clubName})</div>
-      <div>${summaryEventsText}</div>
+      <div style="padding-bottom: 2px;"><strong>Manager / Coach:</strong> ${coachName} (${clubName})</div>
+      <div style="padding-bottom: 2px;">${summaryEventsText}</div>
     `;
   }
 
   const card = document.getElementById('exportContainer');
-  // Position cleanly in layout for accurate font & box measurement during capture
   const prevStyle = card.getAttribute('style') || '';
   card.style.position = 'fixed';
   card.style.left = '0px';
@@ -211,7 +198,7 @@ export async function exportTeamSheet() {
   await new Promise(r => setTimeout(r, 60));
 
   const canvas = await html2canvas(card, {
-    backgroundColor: '#020617',
+    backgroundColor: '#15803d',
     scale: 2,
     width: card.offsetWidth,
     height: card.offsetHeight,

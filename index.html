@@ -541,20 +541,20 @@
   </div>
 
   <!-- Hidden Printable Card for Image Export -->
-  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[860px] bg-slate-950 p-7 text-white font-sans leading-normal">
-    <div class="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-5">
+  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[860px] pitch-bg p-7 text-white font-sans leading-normal border-4 border-white/90 rounded-2xl">
+    <div class="bg-slate-900/95 border-2 border-white/40 rounded-xl px-5 py-4 flex justify-between items-center mb-5 shadow-lg">
       <div>
-        <div class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-1">MatchDay Ready • Official Match Report & Team Sheet</div>
+        <div class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-0.5">⚽ MatchDay Ready • Official Team Sheet</div>
         <h1 class="text-2xl font-extrabold text-white leading-snug" id="exportTitleText">Straffan AFC Team Sheet</h1>
-        <p class="text-slate-300 text-sm mt-1 font-medium" id="exportDateText"></p>
+        <p class="text-emerald-200 text-sm mt-0.5 font-semibold" id="exportDateText"></p>
       </div>
-      <div class="bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-right">
-        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Format & Tactical Shape</div>
-        <div class="text-sm font-bold text-emerald-400 mt-0.5" id="exportFormationText">7v7 • GK-2-3-1</div>
+      <div class="bg-emerald-800/80 border border-emerald-400/50 rounded-lg px-4 py-2.5 text-right">
+        <div class="text-[11px] uppercase tracking-wider text-emerald-200 font-bold">Format & Tactical Shape</div>
+        <div class="text-base font-extrabold text-white mt-0.5" id="exportFormationText">7v7 • GK-2-3-1</div>
       </div>
     </div>
     <div id="exportGrid" class="grid grid-cols-2 gap-5"></div>
-    <div id="exportMatchFooter" class="mt-5 pt-3 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400"></div>
+    <div id="exportMatchFooter" class="mt-5 bg-slate-900/90 border border-white/30 rounded-lg px-4 py-2.5 flex justify-between items-center text-xs text-emerald-100 font-medium"></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
