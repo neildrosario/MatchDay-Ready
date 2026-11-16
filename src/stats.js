@@ -18,6 +18,10 @@ import {
   updateCoachRole,
   toggleCoachTeamAssignment,
   removeCoachProfile,
+  extractUFootballVersionRank,
+  parseUFootballPayloadFromString,
+  findLatestUFootballAppInLocalStorage,
+  importLegacyPayloadObject,
   importLegacyPrototypeData
 } from './db.js';
 
@@ -385,11 +389,140 @@ export async function handleCreateTeamUI() {
 }
 
 export async function handleImportLegacyUI() {
+  const modal = document.getElementById('betaImportModal');
+  const statusEl = document.getElementById('betaDetectedLocalStatus');
+  const localBtn = document.getElementById('betaImportLocalBtn');
+  const detected = findLatestUFootballAppInLocalStorage();
+
+  if (statusEl && localBtn) {
+    if (detected) {
+      const pCount = (detected.data.players || []).length;
+      const mCount = Object.keys(detected.data.matches || {}).length;
+      statusEl.innerHTML = `✅ Found <strong>${detected.sourceKey}</strong> in browser storage (${pCount} players, ${mCount} matches).`;
+      statusEl.className = 'text-xs text-emerald-300 bg-emerald-950/50 border border-emerald-500/40 p-2 rounded';
+      localBtn.classList.remove('hidden');
+    } else {
+      statusEl.innerHTML = `ℹ️ No <code>uFootballApp*</code> key found in this domain's browser storage. Select your latest <strong>uFootballApp</strong> file below or import via SheetDB URL:`;
+      statusEl.className = 'text-xs text-slate-300 bg-slate-900 p-2 rounded border border-slate-700';
+      localBtn.classList.add('hidden');
+    }
+  }
+
+  if (modal) {
+    modal.classList.remove('hidden');
+  } else if (detected) {
+    const res = await importLegacyPrototypeData();
+    if (res) {
+      alert(
+        `✅ Imported ${res.sourceLabel}: ${res.addedPlayers} new players and ${res.importedMatches} matches!`
+      );
+    }
+  }
+}
+
+export function closeBetaImportModal() {
+  document.getElementById('betaImportModal')?.classList.add('hidden');
+}
+
+export async function handleConfirmLocalBetaImport() {
   try {
-    await importLegacyPrototypeData();
-    alert('✅ Imported legacy prototype squad & match history into the selected team!');
+    const res = await importLegacyPrototypeData();
+    if (!res) {
+      return alert('No uFootballApp data found in browser storage.');
+    }
+    closeBetaImportModal();
+    alert(
+      `✅ Imported latest browser data (${res.sourceLabel}) into ${getSelectedTeam().name}: ${res.totalPlayersInFile} players (${res.addedPlayers} new) & ${res.importedMatches} matches!`
+    );
   } catch (e) {
-    alert(e.message || 'Could not import legacy data.');
+    alert(e.message || 'Error importing browser data.');
+  }
+}
+
+export async function handleBetaFileSelect(event) {
+  const files = Array.from(event?.target?.files || []);
+  if (files.length === 0) return;
+
+  // Sort selected files so the highest uFootballApp version rank or newest file modified date wins automatically
+  const candidates = [];
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      const parsed = parseUFootballPayloadFromString(text);
+      if (parsed) {
+        candidates.push({
+          fileName: file.name,
+          rank: extractUFootballVersionRank(file.name),
+          lastModified: file.lastModified || 0,
+          data: parsed
+        });
+      }
+    } catch (_) {}
+  }
+
+  if (candidates.length === 0) {
+    alert('Could not find valid uFootballApp player/match data in the selected file(s).');
+    return;
+  }
+
+  candidates.sort((a, b) => {
+    if (b.rank !== a.rank) return b.rank - a.rank;
+    return b.lastModified - a.lastModified;
+  });
+
+  const latest = candidates[0];
+  try {
+    const res = await importLegacyPayloadObject(latest.data, latest.fileName);
+    event.target.value = '';
+    closeBetaImportModal();
+    alert(
+      `✅ Imported latest file "${res.sourceLabel}" into ${getSelectedTeam().name}: ${res.totalPlayersInFile} players (${res.addedPlayers} new) & ${res.importedMatches} matches!`
+    );
+  } catch (e) {
+    alert(e.message || 'Failed to import file.');
+  }
+}
+
+export async function handleBetaSheetDbOrJsonImport() {
+  const input = document.getElementById('betaSheetDbOrJsonInput')?.value.trim() || '';
+  if (!input) {
+    return alert('Please paste your Beta SheetDB URL or raw uFootballApp JSON.');
+  }
+
+  try {
+    let parsed = null;
+    let label = 'Pasted JSON';
+
+    if (/^https?:\/\//i.test(input)) {
+      const cleanUrl = input.replace(/\/$/, '');
+      const fetchUrl = cleanUrl.includes('/id/app_state')
+        ? cleanUrl
+        : `${cleanUrl}/id/app_state`;
+      const res = await fetch(fetchUrl);
+      if (!res.ok) {
+        // Fallback to base SheetDB URL if /id/app_state wasn't used
+        const resFallback = await fetch(cleanUrl);
+        if (!resFallback.ok) throw new Error('Could not fetch from SheetDB URL.');
+        parsed = parseUFootballPayloadFromString(await resFallback.text());
+      } else {
+        parsed = parseUFootballPayloadFromString(await res.text());
+      }
+      label = 'SheetDB Cloud';
+    } else {
+      parsed = parseUFootballPayloadFromString(input);
+    }
+
+    if (!parsed) {
+      throw new Error('Could not parse valid uFootballApp players/matches from the input.');
+    }
+
+    const result = await importLegacyPayloadObject(parsed, label);
+    closeBetaImportModal();
+    alert(
+      `✅ Imported from ${result.sourceLabel} into ${getSelectedTeam().name}: ${result.totalPlayersInFile} players (${result.addedPlayers} new) & ${result.importedMatches} matches!`
+    );
+  } catch (e) {
+    alert(e.message || 'Import failed.');
   }
 }
 

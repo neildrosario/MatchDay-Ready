@@ -43,7 +43,11 @@ import {
   handleClearTeamPlayersUI,
   handleCreateTeamUI,
   handleInviteCoachUI,
-  handleImportLegacyUI
+  handleImportLegacyUI,
+  closeBetaImportModal,
+  handleConfirmLocalBetaImport,
+  handleBetaFileSelect,
+  handleBetaSheetDbOrJsonImport
 } from './stats.js';
 import {
   renderSquadSplitter,
@@ -125,6 +129,10 @@ Object.assign(window, {
   handleCreateTeamUI,
   handleInviteCoachUI,
   handleImportLegacyUI,
+  closeBetaImportModal,
+  handleConfirmLocalBetaImport,
+  handleBetaFileSelect,
+  handleBetaSheetDbOrJsonImport,
   renderSquadSplitter,
   autoSplitAgeGroupPlayers,
   resetSplitterToPrimary,

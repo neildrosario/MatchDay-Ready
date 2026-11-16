@@ -1589,45 +1589,139 @@ export async function publishAgeGroupSquadSplit({
 }
 
 /**
- * Migrate legacy single-file LocalStorage data (`uFootballAppV7` / `V6` / `V5`) into the currently selected team
+ * Extract numeric version rank from any key or filename like `uFootballAppV4`, `uFootballApp_v2.json`, `uFootballApp`
  */
-export async function importLegacyPrototypeData() {
-  const raw =
-    localStorage.getItem('uFootballAppV7') ||
-    localStorage.getItem('uFootballAppV6') ||
-    localStorage.getItem('uFootballAppV5');
+export function extractUFootballVersionRank(name = '') {
+  const match = String(name).match(/uFootballApp[_\-\s]*v?(\d+)/i);
+  if (match && match[1]) {
+    return parseInt(match[1], 10);
+  }
+  if (/uFootballApp/i.test(name)) {
+    return 0;
+  }
+  return -1;
+}
 
-  if (!raw) {
-    throw new Error('No legacy beta data (uFootballAppV7) found in this browser.');
+/**
+ * Parse a uFootballApp state payload from raw JSON, SheetDB response array, or HTML file
+ */
+export function parseUFootballPayloadFromString(rawText = '') {
+  const trimmed = (rawText || '').trim();
+  if (!trimmed) return null;
+
+  // 1. Try direct JSON parse
+  try {
+    const parsed = JSON.parse(trimmed);
+    // Handle SheetDB array format: [{ id: 'app_state', data: '{"players":...}' }]
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].data) {
+      const inner = typeof parsed[0].data === 'string' ? JSON.parse(parsed[0].data) : parsed[0].data;
+      if (inner && Array.isArray(inner.players)) return inner;
+    }
+    // Handle wrapped { data: '{"players":...}' }
+    if (parsed && typeof parsed.data === 'string') {
+      const inner = JSON.parse(parsed.data);
+      if (inner && Array.isArray(inner.players)) return inner;
+    }
+    if (parsed && (Array.isArray(parsed.players) || typeof parsed.matches === 'object')) {
+      return parsed;
+    }
+  } catch (_) {}
+
+  // 2. If user selected an .html or .js file, extract any embedded JSON state or players array
+  const playersMatch = trimmed.match(/players\s*:\s*\[([^\]]+)\]/);
+  if (playersMatch) {
+    const names = playersMatch[1]
+      .split(',')
+      .map(s => s.replace(/['"`]/g, '').trim())
+      .filter(Boolean);
+    if (names.length > 0) {
+      return { players: names, matches: {} };
+    }
   }
 
-  const legacy = JSON.parse(raw);
+  return null;
+}
+
+/**
+ * Scans all keys in browser localStorage for ANY `uFootballApp*` version (V1..V99 or unversioned)
+ * and returns the latest valid payload `{ sourceKey, data }`.
+ */
+export function findLatestUFootballAppInLocalStorage() {
+  const candidates = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    // Skip current v2/v3 multi-tenant club store keys
+    if (key.startsWith('matchday_')) continue;
+
+    const rank = extractUFootballVersionRank(key);
+    const raw = localStorage.getItem(key);
+    const parsed = parseUFootballPayloadFromString(raw);
+    if (parsed && (Array.isArray(parsed.players) || parsed.matches)) {
+      const matchCount = Object.keys(parsed.matches || {}).length;
+      candidates.push({
+        sourceKey: key,
+        rank: rank >= 0 ? rank : 0,
+        matchCount,
+        data: parsed
+      });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Sort by highest version rank first; break ties by most saved matches
+  candidates.sort((a, b) => {
+    if (b.rank !== a.rank) return b.rank - a.rank;
+    return b.matchCount - a.matchCount;
+  });
+
+  return candidates[0];
+}
+
+/**
+ * Imports a parsed legacy uFootballApp payload `{ players, matches, qtrMins, formation }`
+ * into the currently selected team.
+ */
+export async function importLegacyPayloadObject(legacy, sourceLabel = 'uFootballApp') {
+  if (!legacy || (!Array.isArray(legacy.players) && !legacy.matches)) {
+    throw new Error('Invalid uFootballApp data structure.');
+  }
+
   const team = getSelectedTeam();
   const existingNames = new Set(appState.players.map(p => getPlayerDisplayName(p).toLowerCase()));
+  let addedPlayers = 0;
 
   // 1. Import players
   for (const pName of legacy.players || []) {
-    if (!existingNames.has(pName.trim().toLowerCase())) {
+    if (pName && !existingNames.has(pName.trim().toLowerCase())) {
       await addClubPlayer({
         firstName: pName.trim(),
         lastName: '',
         primaryTeamId: team.teamId,
         sharedWithTeamIds: []
       });
+      existingNames.add(pName.trim().toLowerCase());
+      addedPlayers++;
     }
   }
 
   // 2. Import matches & quarters
   const matchesObj = legacy.matches || {};
+  let importedMatches = 0;
+
   for (const [dateStr, mData] of Object.entries(matchesObj)) {
+    if (!mData || typeof mData !== 'object') continue;
     const matchId = getMatchId(team.teamId, dateStr);
+    const formation = legacy.formation || team.defaultFormation || '7v7';
     const matchDoc = {
       matchId,
       teamId: team.teamId,
       date: dateStr,
       opposition: mData.opposition || '',
       qtrMins: parseFloat(legacy.qtrMins) || team.defaultQtrMins || 12,
-      formation: legacy.formation || team.defaultFormation || '7v7',
+      formation,
+      tacticalShape: getDefaultShapeForFormat(formation),
       updatedAt: new Date().toISOString(),
       updatedBy: appState.currentUser?.uid || 'local_coach_1'
     };
@@ -1640,6 +1734,7 @@ export async function importLegacyPrototypeData() {
       store.matches[matchId] = matchDoc;
       saveLocalStore(store);
     }
+    importedMatches++;
 
     for (const q of [1, 2, 3, 4]) {
       const qData = mData[q];
@@ -1651,9 +1746,11 @@ export async function importLegacyPrototypeData() {
         teamId: team.teamId,
         date: dateStr,
         quarter: q,
+        tacticalShape: getDefaultShapeForFormat(formation),
         lineup: qData.lineup || {},
-        unavailablePlayers: qData.unavailable || [],
-        swaps: qData.swaps || []
+        unavailablePlayers: qData.unavailable || qData.unavailablePlayers || [],
+        swaps: qData.swaps || [],
+        events: qData.events || []
       };
 
       if (appState.mode === 'firebase') {
@@ -1666,4 +1763,36 @@ export async function importLegacyPrototypeData() {
       }
     }
   }
+
+  return {
+    sourceLabel,
+    addedPlayers,
+    totalPlayersInFile: (legacy.players || []).length,
+    importedMatches
+  };
+}
+
+/**
+ * Migrate legacy uFootballApp data from LocalStorage (any version), or SheetDB if configured
+ */
+export async function importLegacyPrototypeData() {
+  const detected = findLatestUFootballAppInLocalStorage();
+  if (detected) {
+    return await importLegacyPayloadObject(detected.data, detected.sourceKey);
+  }
+
+  // Also check if a SheetDB URL is stored in localStorage from the beta prototype
+  const savedSheetDb = localStorage.getItem('sheetDbUrl');
+  if (savedSheetDb) {
+    const res = await fetch(`${savedSheetDb.replace(/\/$/, '')}/id/app_state`);
+    if (res.ok) {
+      const text = await res.text();
+      const parsed = parseUFootballPayloadFromString(text);
+      if (parsed) {
+        return await importLegacyPayloadObject(parsed, 'SheetDB (app_state)');
+      }
+    }
+  }
+
+  return null;
 }

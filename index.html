@@ -491,6 +491,42 @@
     </div>
   </div>
 
+  <!-- BETA DATA IMPORTER MODAL (Any uFootballApp Version / File / SheetDB) -->
+  <div id="betaImportModal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-4 text-white shadow-2xl space-y-3 text-xs">
+      <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+        <h3 class="font-bold text-amber-400 text-sm">📥 Import Beta Data (Any uFootballApp Version)</h3>
+        <button onclick="closeBetaImportModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+      </div>
+
+      <!-- 1. Auto-Detected Browser Storage (Scans all uFootballApp* versions) -->
+      <div class="space-y-2">
+        <div id="betaDetectedLocalStatus" class="text-xs text-slate-300 bg-slate-900 p-2 rounded border border-slate-700"></div>
+        <button id="betaImportLocalBtn" onclick="handleConfirmLocalBetaImport()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow hidden">
+          ⚡ Import Auto-Detected Browser Data Now
+        </button>
+      </div>
+
+      <!-- 2. Select Latest uFootballApp File(s) from Device -->
+      <div class="border-t border-slate-700 pt-2.5 space-y-1.5">
+        <label class="block font-bold text-slate-200">📂 Or Select uFootballApp File(s) (.json / .html):</label>
+        <p class="text-[11px] text-slate-400">Select one or more files — the importer automatically picks the latest version:</p>
+        <input type="file" id="betaFileInput" multiple accept=".json,.html,.txt" onchange="handleBetaFileSelect(event)"
+          class="w-full bg-slate-900 text-slate-200 p-1.5 rounded border border-slate-700 text-[11px] file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500">
+      </div>
+
+      <!-- 3. Import from Beta SheetDB URL or Raw JSON -->
+      <div class="border-t border-slate-700 pt-2.5 space-y-1.5">
+        <label class="block font-bold text-slate-200">☁️ Or Paste Beta SheetDB URL / Raw JSON:</label>
+        <textarea id="betaSheetDbOrJsonInput" rows="2" placeholder="https://sheetdb.io/api/v1/... or paste JSON" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-[11px] text-white font-mono"></textarea>
+        <div class="flex gap-2">
+          <button onclick="closeBetaImportModal()" class="flex-1 bg-slate-700 py-1.5 rounded font-semibold text-xs">Close</button>
+          <button onclick="handleBetaSheetDbOrJsonImport()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-1.5 rounded font-bold text-xs">Fetch & Import</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- COACH AUTHENTICATION MODAL (Firebase Auth + Local Sandbox Option) -->
   <div id="authModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl">
