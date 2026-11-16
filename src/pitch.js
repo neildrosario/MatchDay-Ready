@@ -3,6 +3,10 @@ import {
   getDefaultShapeForFormat,
   getAvailableShapesForFormat,
   getPositionsForFormatAndShape,
+  getMatchPeriods,
+  getPeriodShortLabel,
+  getPeriodLongLabel,
+  getPeriodUnitLabel,
   appState,
   getSelectedTeam,
   getTeamPlayers,
@@ -15,6 +19,13 @@ import {
   saveMatchMetadata,
   saveQuarterLineup
 } from './db.js';
+
+const ROLE_BADGE_TEXT = {
+  GK: '🧤GK',
+  DEF: '🛡️DEF',
+  MID: '⚙️MID',
+  ATT: '⚡ATT'
+};
 
 export function getActivePositions(quarter = appState.currentQuarter) {
   const match = getCurrentMatchDoc();
@@ -82,6 +93,14 @@ export function renderHeaderAndMatchBar() {
   }
 
   const match = getCurrentMatchDoc();
+  const periods = getMatchPeriods(match);
+  const periodCount = periods.length;
+
+  // Clamp currentQuarter if switching from 4 Quarters -> 2 Halves
+  if (appState.currentQuarter > periodCount) {
+    appState.currentQuarter = 1;
+  }
+
   const qDoc = getQuarterLineupDoc(appState.currentQuarter);
 
   const qtrInput = document.getElementById('qtrMins');
@@ -89,16 +108,34 @@ export function renderHeaderAndMatchBar() {
     qtrInput.value = match.qtrMins ?? 12;
   }
 
+  const unitEl = document.getElementById('periodUnitLabel');
+  if (unitEl) {
+    unitEl.innerText = getPeriodUnitLabel(periodCount);
+  }
+
+  const periodSelect = document.getElementById('periodCountSelect');
+  if (periodSelect) {
+    periodSelect.value = String(periodCount);
+  }
+
   const fmtSelect = document.getElementById('formationSelect');
   if (fmtSelect) {
     fmtSelect.value = match.formation || '7v7';
   }
 
-  // Tactical Shape selector for the active quarter
+  const curShort = getPeriodShortLabel(appState.currentQuarter, periodCount);
+  const firstShort = getPeriodShortLabel(1, periodCount);
+  const lastShort = getPeriodShortLabel(periodCount, periodCount);
+
+  // Tactical Shape selector for the active period
   const shapeSelect = document.getElementById('tacticalShapeSelect');
   const shapeQuarterLabel = document.getElementById('tacticalShapeQuarterLabel');
+  const applyBtn = document.getElementById('applyShapeAllBtn');
   if (shapeQuarterLabel) {
-    shapeQuarterLabel.innerText = `Q${appState.currentQuarter} Formation:`;
+    shapeQuarterLabel.innerText = `${curShort} Formation:`;
+  }
+  if (applyBtn) {
+    applyBtn.innerText = `Apply ${firstShort}–${lastShort}`;
   }
   if (shapeSelect) {
     const shapes = getAvailableShapesForFormat(match.formation || '7v7');
@@ -110,20 +147,29 @@ export function renderHeaderAndMatchBar() {
       .join('');
   }
 
-  // Update Q1-Q4 buttons with each quarter's formation shape subtitle
-  [1, 2, 3, 4].forEach(qNum => {
-    const btn = document.getElementById(`qbtn-${qNum}`);
-    if (btn) {
-      const qLineup = getQuarterLineupDoc(qNum);
-      const isCurrent = qNum === appState.currentQuarter;
-      btn.className = isCurrent
-        ? 'q-btn py-1.5 px-1 rounded font-bold bg-emerald-600 text-white text-xs shadow flex flex-col items-center leading-tight'
-        : 'q-btn py-1.5 px-1 rounded font-bold bg-slate-800 text-slate-300 text-xs flex flex-col items-center leading-tight';
-      btn.innerHTML = `<span>Q${qNum}</span><span class="text-[9px] font-normal ${
-        isCurrent ? 'text-emerald-100' : 'text-slate-400'
-      }">${qLineup.tacticalShape}</span>`;
-    }
-  });
+  // Render dynamic Period Tabs (2 Halves H1-H2, 3 Thirds T1-T3, or 4 Quarters Q1-Q4)
+  const tabsGrid = document.getElementById('periodTabsGrid');
+  if (tabsGrid) {
+    const colsClass =
+      periodCount === 2 ? 'grid-cols-2' : periodCount === 3 ? 'grid-cols-3' : 'grid-cols-4';
+    tabsGrid.className = `grid ${colsClass} gap-2 mb-2.5`;
+    tabsGrid.innerHTML = periods
+      .map(pNum => {
+        const pLineup = getQuarterLineupDoc(pNum);
+        const isCurrent = pNum === appState.currentQuarter;
+        const label = getPeriodShortLabel(pNum, periodCount);
+        const btnClass = isCurrent
+          ? 'q-btn py-1.5 px-1 rounded font-bold bg-emerald-600 text-white text-xs shadow flex flex-col items-center leading-tight'
+          : 'q-btn py-1.5 px-1 rounded font-bold bg-slate-800 text-slate-300 text-xs flex flex-col items-center leading-tight';
+        return `<button onclick="setQuarter(${pNum})" id="qbtn-${pNum}" class="${btnClass}">
+          <span>${label}</span>
+          <span class="text-[9px] font-normal ${
+            isCurrent ? 'text-emerald-100' : 'text-slate-400'
+          }">${pLineup.tacticalShape}</span>
+        </button>`;
+      })
+      .join('');
+  }
 
   const dateInput = document.getElementById('matchDate');
   if (dateInput && dateInput.value !== appState.selectedDate) {
@@ -173,11 +219,20 @@ export async function onConfigQtrMinsChange(val) {
   await saveMatchMetadata({ qtrMins });
 }
 
+export async function onPeriodCountChange(val) {
+  const periodCount = Number(val) || 4;
+  if (appState.currentQuarter > periodCount) {
+    appState.currentQuarter = 1;
+  }
+  // If switching to 2 Halves and qtrMins is still 12, keep coach's value or let them adjust
+  await saveMatchMetadata({ periodCount });
+}
+
 export async function onFormationChange(formation) {
   const defaultShape = getDefaultShapeForFormat(formation);
   await saveMatchMetadata({ formation, tacticalShape: defaultShape });
 
-  // Remap existing lineups in all 4 quarters to the new format's default shape
+  // Remap existing lineups in all periods to the new format's default shape
   const newPositions = getPositionsForFormatAndShape(formation, defaultShape);
   for (const q of [1, 2, 3, 4]) {
     const qDoc = getQuarterLineupDoc(q);
@@ -207,12 +262,13 @@ export async function onTacticalShapeChange(newShape) {
 
 export async function applyShapeToAllQuarters() {
   const match = getCurrentMatchDoc();
+  const periods = getMatchPeriods(match);
   const currentQDoc = getQuarterLineupDoc(appState.currentQuarter);
   const targetShape = currentQDoc.tacticalShape;
   const newPositions = getPositionsForFormatAndShape(match.formation || '7v7', targetShape);
 
   await saveMatchMetadata({ tacticalShape: targetShape });
-  for (const q of [1, 2, 3, 4]) {
+  for (const q of periods) {
     const qDoc = getQuarterLineupDoc(q);
     const remapped = remapLineupToNewPositions(qDoc.lineup || {}, newPositions);
     await saveQuarterLineup(q, {
@@ -220,7 +276,9 @@ export async function applyShapeToAllQuarters() {
       lineup: remapped
     });
   }
-  alert(`✅ Applied formation ${targetShape} across Q1–Q4!`);
+  const firstShort = getPeriodShortLabel(1, periods.length);
+  const lastShort = getPeriodShortLabel(periods.length, periods.length);
+  alert(`✅ Applied formation ${targetShape} across ${firstShort}–${lastShort}!`);
 }
 
 export async function onOppositionInputChange(opposition) {
@@ -267,12 +325,17 @@ export function renderPitch() {
   renderHeaderAndMatchBar();
 
   const match = getCurrentMatchDoc();
+  const periodCount = getMatchPeriods(match).length;
   const team = getSelectedTeam();
   const teamPlayers = getTeamPlayers(team.teamId);
   const playerNames = teamPlayers.map(p => getPlayerDisplayName(p));
   const sharedSet = new Set(
     teamPlayers.filter(p => p.primaryTeamId !== team.teamId).map(p => getPlayerDisplayName(p))
   );
+  const preferredMap = {};
+  teamPlayers.forEach(p => {
+    preferredMap[getPlayerDisplayName(p)] = p.preferredGroup || 'ANY';
+  });
 
   const q = appState.currentQuarter;
   const qObj = getQuarterLineupDoc(q);
@@ -300,7 +363,9 @@ export function renderPitch() {
       conflictList.innerHTML = conflicts
         .map(
           c =>
-            `<div>⚠️ <strong>${c.playerName}</strong> is also assigned to <strong>${c.otherTeamName}</strong> (${c.otherPosId}) in Q${c.quarter}.</div>`
+            `<div>⚠️ <strong>${c.playerName}</strong> is also assigned to <strong>${
+              c.otherTeamName
+            }</strong> (${c.otherPosId}) in ${getPeriodShortLabel(c.quarter, periodCount)}.</div>`
         )
         .join('');
     } else {
@@ -335,8 +400,12 @@ export function renderPitch() {
         playerNames.forEach(pName => {
           if (unavailSet.has(pName)) return;
           const isTakenElsewhere = assigned.has(pName) && currentVal !== pName;
+          const pref = preferredMap[pName];
+          const roleTag = pref && ROLE_BADGE_TEXT[pref] ? ` [${ROLE_BADGE_TEXT[pref]}]` : '';
           const sharedTag = sharedSet.has(pName) ? ' 🔗' : '';
-          const label = isTakenElsewhere ? `${pName}${sharedTag} (On Pitch)` : `${pName}${sharedTag}`;
+          const label = isTakenElsewhere
+            ? `${pName}${roleTag}${sharedTag} (On Pitch)`
+            : `${pName}${roleTag}${sharedTag}`;
           const selected = currentVal === pName ? 'selected' : '';
           options.push(`<option value="${pName.replace(/"/g, '&quot;')}" ${selected}>${label}</option>`);
         });
@@ -364,7 +433,7 @@ export function renderPitch() {
     });
   }
 
-  // 3. Render Substitutes Bench
+  // 3. Render Substitutes Bench (with Specialist Role Badges)
   const subs = playerNames.filter(p => !assigned.has(p) && !unavailSet.has(p));
   const benchEl = document.getElementById('subsBench');
   const subBadge = document.getElementById('subCountBadge');
@@ -374,7 +443,12 @@ export function renderPitch() {
       ? subs
           .map(s => {
             const isShared = sharedSet.has(s);
-            return `<span class="bg-slate-700 text-slate-200 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">${s}${
+            const pref = preferredMap[s];
+            const roleTag =
+              pref && ROLE_BADGE_TEXT[pref]
+                ? `<span class="text-[9px] bg-slate-900/80 text-emerald-300 px-1 rounded">${ROLE_BADGE_TEXT[pref]}</span>`
+                : '';
+            return `<span class="bg-slate-700 text-slate-200 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">${s}${roleTag}${
               isShared ? '<span class="text-[10px] text-sky-300" title="Shared Age-Group Player">🔗</span>' : ''
             }</span>`;
           })
@@ -406,7 +480,7 @@ export function renderPitch() {
     });
   }
 
-  // 5. Render Mid-Quarter Swaps Log
+  // 5. Render Mid-Period Swaps Log
   const swapContainer = document.getElementById('swapLogContainer');
   const swapList = document.getElementById('swapLogList');
   if (swapContainer && swapList) {
@@ -493,7 +567,7 @@ export async function executeSwap() {
     swapDescription = `Swapped positions: ${playerA} (${posAId}) ⇄ ${playerB} (${posBId})`;
   }
 
-  swaps.push({ time: 'Mid-Qtr', text: swapDescription });
+  swaps.push({ time: 'Mid-Period', text: swapDescription });
   await saveQuarterLineup(q, { lineup: qData, swaps });
   closeSwapModal();
 }
@@ -506,8 +580,16 @@ export async function clearSwaps() {
 export async function autoGenerateMatch() {
   const team = getSelectedTeam();
   const match = getCurrentMatchDoc();
+  const periods = getMatchPeriods(match);
+  const periodCount = periods.length;
   const teamSize = getTeamSize();
-  const playerNames = getTeamPlayers(team.teamId).map(p => getPlayerDisplayName(p));
+  const teamPlayers = getTeamPlayers(team.teamId);
+  const playerNames = teamPlayers.map(p => getPlayerDisplayName(p));
+
+  const preferredMap = {};
+  teamPlayers.forEach(p => {
+    preferredMap[getPlayerDisplayName(p)] = p.preferredGroup || 'ANY';
+  });
 
   if (playerNames.length < teamSize) {
     alert(
@@ -515,9 +597,12 @@ export async function autoGenerateMatch() {
     );
     return;
   }
+
+  const periodWord =
+    periodCount === 2 ? '2 Halves' : periodCount === 3 ? '3 Thirds' : '4 Quarters';
   if (
     !confirm(
-      `Automatically schedule fair playing time and position rotation across all 4 quarters for ${team.name} (${match.formation})?`
+      `Automatically schedule fair playing time and position rotation across ${periodWord} for ${team.name} (${match.formation})? (Specialist 🧤 GK & preferred positions will be respected).`
     )
   ) {
     return;
@@ -528,17 +613,20 @@ export async function autoGenerateMatch() {
     tracking[p] = { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
   });
 
-  for (const q of [1, 2, 3, 4]) {
+  for (const q of periods) {
     const qObj = getQuarterLineupDoc(q);
     const activePositions = getActivePositions(q);
     const unavailSet = new Set(qObj.unavailablePlayers || []);
     const availablePlayers = playerNames.filter(p => !unavailSet.has(p));
 
     if (availablePlayers.length < teamSize) {
-      alert(`Warning: Quarter ${q} has fewer than ${teamSize} available players. Skipping auto-fill.`);
+      alert(
+        `Warning: ${getPeriodLongLabel(q, periodCount)} has fewer than ${teamSize} available players. Skipping auto-fill.`
+      );
       continue;
     }
 
+    // Sort by lowest total periods played so far for fair playing time
     availablePlayers.sort((a, b) => {
       if (tracking[a].totalQtrs !== tracking[b].totalQtrs) {
         return tracking[a].totalQtrs - tracking[b].totalQtrs;
@@ -549,17 +637,49 @@ export async function autoGenerateMatch() {
     const startingPlayers = availablePlayers.slice(0, teamSize);
     const newLineup = {};
 
-    // 1. Assign GK
-    startingPlayers.sort((a, b) => tracking[a].GK - tracking[b].GK);
-    newLineup.GK = startingPlayers[0];
-    tracking[startingPlayers[0]].GK++;
+    // 1. Assign GK — If the squad has specialist 🧤 GKs available, ensure one is in goal
+    const availableSpecGKs = availablePlayers
+      .filter(p => preferredMap[p] === 'GK')
+      .sort((a, b) => tracking[a].GK - tracking[b].GK || tracking[a].totalQtrs - tracking[b].totalQtrs);
+
+    if (availableSpecGKs.length > 0) {
+      const chosenGK = availableSpecGKs[0];
+      if (!startingPlayers.includes(chosenGK)) {
+        // Swap out the last non-GK starter so startingPlayers stays exact teamSize
+        for (let i = startingPlayers.length - 1; i >= 0; i--) {
+          if (preferredMap[startingPlayers[i]] !== 'GK') {
+            startingPlayers[i] = chosenGK;
+            break;
+          }
+        }
+      }
+      newLineup.GK = chosenGK;
+      tracking[chosenGK].GK++;
+    } else {
+      // No specialist GK tagged -> rotate GK fairly across starters
+      startingPlayers.sort((a, b) => tracking[a].GK - tracking[b].GK);
+      newLineup.GK = startingPlayers[0];
+      tracking[startingPlayers[0]].GK++;
+    }
 
     let remaining = startingPlayers.filter(p => p !== newLineup.GK);
 
-    // 2. Assign ATT slots (handles 1, 2, or 3 forwards in any shape)
+    // Helper priority comparator for zone preference ('ATT', 'DEF', 'MID')
+    const zonePriority = (pName, targetZone) => {
+      const pref = preferredMap[pName] || 'ANY';
+      if (pref === targetZone) return 0; // Explicitly prefers this zone
+      if (pref === 'ANY') return 1; // Flexible rotation player
+      return 2; // Prefers a different zone
+    };
+
+    // 2. Assign ATT slots
     const attSlots = activePositions.filter(p => p.group === 'ATT');
     if (attSlots.length > 0) {
-      remaining.sort((a, b) => tracking[a].ATT - tracking[b].ATT);
+      remaining.sort((a, b) => {
+        const prioDiff = zonePriority(a, 'ATT') - zonePriority(b, 'ATT');
+        if (prioDiff !== 0) return prioDiff;
+        return tracking[a].ATT - tracking[b].ATT;
+      });
       attSlots.forEach((slot, idx) => {
         if (remaining[idx]) {
           newLineup[slot.id] = remaining[idx];
@@ -569,10 +689,14 @@ export async function autoGenerateMatch() {
       remaining = remaining.slice(attSlots.length);
     }
 
-    // 3. Assign DEF slots (handles 1, 2, 3, 4, or 5 defenders in any shape)
+    // 3. Assign DEF slots
     const defSlots = activePositions.filter(p => p.group === 'DEF');
     if (defSlots.length > 0) {
-      remaining.sort((a, b) => tracking[a].DEF - tracking[b].DEF);
+      remaining.sort((a, b) => {
+        const prioDiff = zonePriority(a, 'DEF') - zonePriority(b, 'DEF');
+        if (prioDiff !== 0) return prioDiff;
+        return tracking[a].DEF - tracking[b].DEF;
+      });
       defSlots.forEach((slot, idx) => {
         if (remaining[idx]) {
           newLineup[slot.id] = remaining[idx];
@@ -582,10 +706,14 @@ export async function autoGenerateMatch() {
       remaining = remaining.slice(defSlots.length);
     }
 
-    // 4. Assign MID slots (handles remaining midfield slots)
+    // 4. Assign MID slots
     const midSlots = activePositions.filter(p => p.group === 'MID');
     if (midSlots.length > 0) {
-      remaining.sort((a, b) => tracking[a].MID - tracking[b].MID);
+      remaining.sort((a, b) => {
+        const prioDiff = zonePriority(a, 'MID') - zonePriority(b, 'MID');
+        if (prioDiff !== 0) return prioDiff;
+        return tracking[a].MID - tracking[b].MID;
+      });
       midSlots.forEach((slot, idx) => {
         if (remaining[idx]) {
           newLineup[slot.id] = remaining[idx];
@@ -606,12 +734,12 @@ export async function autoGenerateMatch() {
     });
   }
 
-  alert(`✨ Auto-fair lineup generated for ${team.name} (${match.formation})!`);
+  alert(`✨ Auto-fair lineup generated across ${periodWord} for ${team.name}!`);
 }
 
 export async function copyPreviousQuarter() {
   const q = appState.currentQuarter;
-  if (q === 1) return alert('Select Q2, Q3, or Q4 to copy from the previous quarter.');
+  if (q === 1) return alert('Select Period 2, 3, or 4 to copy from the previous period.');
   const prevQ = getQuarterLineupDoc(q - 1);
   await saveQuarterLineup(q, {
     tacticalShape: prevQ.tacticalShape,

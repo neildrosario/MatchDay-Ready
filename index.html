@@ -16,9 +16,14 @@
         <span id="syncStatus" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Local Mode</span>
       </div>
       <div class="flex items-center gap-1.5 text-sm">
+        <select id="periodCountSelect" onchange="onPeriodCountChange(this.value)" class="bg-slate-700 text-white font-bold px-2 py-1 rounded border border-slate-600 text-xs" title="Match Periods (Quarters, Thirds, or Halves)">
+          <option value="4" selected>4 Qtrs</option>
+          <option value="3">3 Thirds</option>
+          <option value="2">2 Halves</option>
+        </select>
         <div class="flex items-center bg-slate-700 px-2 py-1 rounded border border-slate-600">
-          <input type="number" id="qtrMins" value="12" min="5" max="30" step="0.5" class="w-10 bg-transparent text-center font-bold text-xs" onchange="onConfigQtrMinsChange(this.value)">
-          <span class="text-[10px] text-slate-300">m/q</span>
+          <input type="number" id="qtrMins" value="12" min="5" max="45" step="0.5" class="w-10 bg-transparent text-center font-bold text-xs" onchange="onConfigQtrMinsChange(this.value)">
+          <span id="periodUnitLabel" class="text-[10px] text-slate-300">m/q</span>
         </div>
         <select id="formationSelect" onchange="onFormationChange(this.value)" class="bg-slate-700 text-white font-bold px-2 py-1 rounded border border-slate-600 text-xs">
           <option value="5v5">5 v 5</option>
@@ -147,21 +152,21 @@
 
     <!-- VIEW 1: MATCH PITCH -->
     <div id="view-pitch">
-      <!-- Quarter Selector -->
-      <div class="grid grid-cols-4 gap-2 mb-2.5">
+      <!-- Period Selector (4 Quarters / 3 Thirds / 2 Halves) -->
+      <div id="periodTabsGrid" class="grid grid-cols-4 gap-2 mb-2.5">
         <button onclick="setQuarter(1)" id="qbtn-1" class="q-btn py-2 rounded font-bold bg-emerald-600 text-white text-sm shadow">Q1</button>
         <button onclick="setQuarter(2)" id="qbtn-2" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q2</button>
         <button onclick="setQuarter(3)" id="qbtn-3" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q3</button>
         <button onclick="setQuarter(4)" id="qbtn-4" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q4</button>
       </div>
 
-      <!-- Per-Quarter Tactical Shape Bar (Milestone 6) -->
+      <!-- Per-Period Tactical Shape Bar (Milestone 6 & 7) -->
       <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-2 mb-2.5 flex items-center justify-between gap-2 text-xs">
         <span id="tacticalShapeQuarterLabel" class="font-bold text-slate-300">Q1 Formation:</span>
         <select id="tacticalShapeSelect" onchange="onTacticalShapeChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
           <option value="GK-2-3-1">📐 GK-2-3-1</option>
         </select>
-        <button onclick="applyShapeToAllQuarters()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1 rounded font-semibold text-[11px] border border-slate-600" title="Apply this tactical formation to all 4 quarters">
+        <button id="applyShapeAllBtn" onclick="applyShapeToAllQuarters()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1 rounded font-semibold text-[11px] border border-slate-600" title="Apply this tactical formation across all match periods">
           Apply Q1–Q4
         </button>
       </div>
@@ -233,9 +238,16 @@
             🧹 Clear Team Players
           </button>
         </div>
-        <div class="flex gap-2">
-          <input type="text" id="newPlayerName" placeholder="Add player (e.g. Liam O'Connor)..." class="flex-1 bg-slate-900 px-3 py-1.5 rounded border border-slate-700 text-sm">
-          <button onclick="handleAddPlayerUI()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 rounded font-bold text-sm">Add</button>
+        <div class="flex gap-1.5">
+          <input type="text" id="newPlayerName" placeholder="Add player (e.g. Liam O'Connor)..." class="flex-1 bg-slate-900 px-2.5 py-1.5 rounded border border-slate-700 text-xs">
+          <select id="newPlayerRoleSelect" class="bg-slate-900 text-slate-200 px-2 py-1.5 rounded border border-slate-700 text-xs font-semibold" title="Preferred Position / Specialist Role">
+            <option value="ANY" selected>🔄 Any</option>
+            <option value="GK">🧤 GK</option>
+            <option value="DEF">🛡️ DEF</option>
+            <option value="MID">⚙️ MID</option>
+            <option value="ATT">⚡ ATT</option>
+          </select>
+          <button onclick="handleAddPlayerUI()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded font-bold text-xs">Add</button>
         </div>
         <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pt-0.5">
           <input type="checkbox" id="shareAcrossAgeGroupCheckbox" class="rounded bg-slate-900 border-slate-600 text-emerald-500">

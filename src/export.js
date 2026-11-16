@@ -5,13 +5,19 @@ import {
   getTeamPlayers,
   getPlayerDisplayName,
   getCurrentMatchDoc,
-  getQuarterLineupDoc
+  getQuarterLineupDoc,
+  getMatchPeriods,
+  getPeriodLongLabel,
+  getPeriodUnitLabel
 } from './db.js';
 import { getActivePositions } from './pitch.js';
 
 export async function exportTeamSheet() {
   const team = getSelectedTeam();
   const match = getCurrentMatchDoc();
+  const periods = getMatchPeriods(match);
+  const periodCount = periods.length;
+  const unitLabel = getPeriodUnitLabel(periodCount);
   const dateStr = appState.selectedDate;
   const clubName = appState.club?.shortName || 'Straffan AFC';
   const oppText = match.opposition ? ` vs ${match.opposition}` : '';
@@ -23,10 +29,10 @@ export async function exportTeamSheet() {
 
   if (titleEl) titleEl.innerText = `${clubName} • ${team.name}${oppText}`;
   if (dateEl) {
-    dateEl.innerText = `Date: ${dateStr} | Format: ${match.formation || '7v7'} (${match.qtrMins}m/q)`;
+    dateEl.innerText = `Date: ${dateStr} | Format: ${match.formation || '7v7'} (${match.qtrMins}${unitLabel})`;
   }
 
-  const qShapes = [1, 2, 3, 4].map(q => getQuarterLineupDoc(q).tacticalShape);
+  const qShapes = periods.map(q => getQuarterLineupDoc(q).tacticalShape);
   const uniqueShapes = Array.from(new Set(qShapes));
   if (fmtEl) {
     fmtEl.innerText = `${match.formation || '7v7'} • ${uniqueShapes.join(' / ')}`;
@@ -35,9 +41,10 @@ export async function exportTeamSheet() {
   const playerNames = getTeamPlayers(team.teamId).map(p => getPlayerDisplayName(p));
 
   if (grid) {
-    grid.innerHTML = [1, 2, 3, 4]
+    grid.innerHTML = periods
       .map(q => {
         const qObj = getQuarterLineupDoc(q);
+        const periodTitle = getPeriodLongLabel(q, periodCount);
         const qData = qObj.lineup || {};
         const unavailSet = new Set(qObj.unavailablePlayers || []);
         const assigned = new Set(Object.values(qData).filter(Boolean));
@@ -76,7 +83,7 @@ export async function exportTeamSheet() {
         <div class="bg-slate-800 rounded-lg p-3 border border-slate-700 flex flex-col justify-between">
           <div>
             <div class="flex justify-between items-center border-b border-slate-700 pb-1.5 mb-2">
-              <span class="font-bold text-emerald-400 text-sm">Quarter ${q}</span>
+              <span class="font-bold text-emerald-400 text-sm">${periodTitle}</span>
               <span class="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded">
                 📐 ${qObj.tacticalShape}
               </span>

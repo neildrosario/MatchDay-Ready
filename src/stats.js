@@ -1,5 +1,6 @@
 import {
   getPositionsForFormatAndShape,
+  getMatchPeriods,
   appState,
   getSelectedTeam,
   getTeamPlayers,
@@ -7,6 +8,7 @@ import {
   getCurrentMatchDoc,
   getMatchId,
   addClubPlayer,
+  updatePlayerPreferredGroup,
   bulkAddClubPlayers,
   clearCurrentTeamPlayers,
   removeClubPlayer,
@@ -50,9 +52,10 @@ export function renderStats() {
     const matchDoc = appState.matchesByTeam[mId] || getCurrentMatchDoc();
     const qtrMins = parseFloat(matchDoc.qtrMins) || currentTeam.defaultQtrMins || 12;
     const format = matchDoc.formation || '7v7';
+    const periods = getMatchPeriods(matchDoc);
 
     const quartersMap = appState.lineupsByMatch[mId] || {};
-    [1, 2, 3, 4].forEach(q => {
+    periods.forEach(q => {
       const qObj = quartersMap[q];
       if (!qObj) return;
       const qData = qObj.lineup || {};
@@ -113,10 +116,11 @@ export function renderStats() {
         const pObj = s.playerObj;
         const isPrimary = !pObj || pObj.primaryTeamId === currentTeam.teamId;
         const isShared = pObj && (pObj.allowedTeamIds || []).length > 1;
+        const pref = pObj?.preferredGroup || 'ANY';
         return `
           <tr>
-            <td class="p-2.5 font-semibold text-white">
-              <div class="flex items-center gap-1.5">
+            <td class="p-2 font-semibold text-white">
+              <div class="flex flex-wrap items-center gap-1">
                 <span>${pName}</span>
                 ${
                   !isPrimary
@@ -126,6 +130,19 @@ export function renderStats() {
                     : ''
                 }
               </div>
+              ${
+                pObj
+                  ? `<div class="mt-1">
+                      <select data-pref-player="${pObj.playerId}" class="player-pref-select bg-slate-900 text-[10px] text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 font-semibold">
+                        <option value="ANY" ${pref === 'ANY' ? 'selected' : ''}>🔄 Any Pos</option>
+                        <option value="GK" ${pref === 'GK' ? 'selected' : ''}>🧤 GK Specialist</option>
+                        <option value="DEF" ${pref === 'DEF' ? 'selected' : ''}>🛡️ DEF Pref</option>
+                        <option value="MID" ${pref === 'MID' ? 'selected' : ''}>⚙️ MID Pref</option>
+                        <option value="ATT" ${pref === 'ATT' ? 'selected' : ''}>⚡ ATT Pref</option>
+                      </select>
+                    </div>`
+                  : ''
+              }
             </td>
             <td class="p-2 text-center font-bold text-emerald-400">${s.TOTAL}m</td>
             <td class="p-2 text-center text-slate-300">${s.GK}m</td>
@@ -143,6 +160,13 @@ export function renderStats() {
         `;
       })
       .join('');
+
+    tbody.querySelectorAll('.player-pref-select').forEach(sel => {
+      sel.addEventListener('change', async e => {
+        const id = sel.getAttribute('data-pref-player');
+        await updatePlayerPreferredGroup(id, e.target.value);
+      });
+    });
 
     tbody.querySelectorAll('.remove-player-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -213,6 +237,7 @@ export function renderSharedRosterManager() {
 
 export async function handleAddPlayerUI() {
   const input = document.getElementById('newPlayerName');
+  const roleSelect = document.getElementById('newPlayerRoleSelect');
   const shareCheckbox = document.getElementById('shareAcrossAgeGroupCheckbox');
   if (!input) return;
 
@@ -222,6 +247,7 @@ export async function handleAddPlayerUI() {
   const parts = full.split(/\s+/);
   const firstName = parts[0];
   const lastName = parts.slice(1).join(' ');
+  const preferredGroup = roleSelect ? roleSelect.value : 'ANY';
 
   const currentTeam = getSelectedTeam();
   let sharedIds = [];
@@ -234,11 +260,13 @@ export async function handleAddPlayerUI() {
   await addClubPlayer({
     firstName,
     lastName,
+    preferredGroup,
     primaryTeamId: currentTeam.teamId,
     sharedWithTeamIds: sharedIds
   });
 
   input.value = '';
+  if (roleSelect) roleSelect.value = 'ANY';
 }
 
 export async function handleCreateTeamUI() {

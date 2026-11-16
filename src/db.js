@@ -791,6 +791,7 @@ export function getCurrentMatchDoc() {
   const matchId = getMatchId(team.teamId, appState.selectedDate);
   const existing = appState.matchesByTeam[matchId];
   const formation = existing?.formation || team.defaultFormation || '7v7';
+  const periodCount = Number(existing?.periodCount) || Number(team.defaultPeriods) || 4;
   const defaultShape = getDefaultShapeForFormat(formation);
   const validShapes = getAvailableShapesForFormat(formation);
   const tacticalShape =
@@ -798,19 +799,47 @@ export function getCurrentMatchDoc() {
       ? existing.tacticalShape
       : defaultShape;
 
-  return (
-    existing
-      ? { ...existing, formation, tacticalShape }
-      : {
-          matchId,
-          teamId: team.teamId,
-          date: appState.selectedDate,
-          opposition: '',
-          qtrMins: team.defaultQtrMins || 12,
-          formation,
-          tacticalShape
-        }
-  );
+  return existing
+    ? { ...existing, formation, periodCount, tacticalShape }
+    : {
+        matchId,
+        teamId: team.teamId,
+        date: appState.selectedDate,
+        opposition: '',
+        qtrMins: team.defaultQtrMins || 12,
+        periodCount,
+        formation,
+        tacticalShape
+      };
+}
+
+export function getMatchPeriods(matchDocInput = null) {
+  const match = matchDocInput || getCurrentMatchDoc();
+  const count = Number(match?.periodCount) || 4;
+  if (count === 2) return [1, 2];
+  if (count === 3) return [1, 2, 3];
+  return [1, 2, 3, 4];
+}
+
+export function getPeriodShortLabel(pNum, periodCount = 4) {
+  const c = Number(periodCount) || 4;
+  if (c === 2) return `H${pNum}`;
+  if (c === 3) return `T${pNum}`;
+  return `Q${pNum}`;
+}
+
+export function getPeriodLongLabel(pNum, periodCount = 4) {
+  const c = Number(periodCount) || 4;
+  if (c === 2) return `Half ${pNum}`;
+  if (c === 3) return `Third ${pNum}`;
+  return `Quarter ${pNum}`;
+}
+
+export function getPeriodUnitLabel(periodCount = 4) {
+  const c = Number(periodCount) || 4;
+  if (c === 2) return 'm/h';
+  if (c === 3) return 'm/t';
+  return 'm/q';
 }
 
 export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdInput = null) {
@@ -966,7 +995,13 @@ export async function saveQuarterLineup(quarter, updates) {
   }
 }
 
-export async function addClubPlayer({ firstName, lastName, primaryTeamId, sharedWithTeamIds = [] }) {
+export async function addClubPlayer({
+  firstName,
+  lastName,
+  primaryTeamId,
+  preferredGroup = 'ANY',
+  sharedWithTeamIds = []
+}) {
   const team = getSelectedTeam();
   const cleanFirst = firstName.trim();
   const cleanLast = (lastName || '').trim();
@@ -983,6 +1018,7 @@ export async function addClubPlayer({ firstName, lastName, primaryTeamId, shared
     firstName: cleanFirst,
     lastName: cleanLast,
     displayName,
+    preferredGroup: preferredGroup || 'ANY',
     primaryTeamId: primaryTeamId || team.teamId,
     allowedTeamIds: allowed
   };
@@ -994,6 +1030,23 @@ export async function addClubPlayer({ firstName, lastName, primaryTeamId, shared
     const store = loadLocalStore();
     store.players[playerId] = newPlayer;
     saveLocalStore(store);
+  }
+}
+
+export async function updatePlayerPreferredGroup(playerId, preferredGroup) {
+  const player = appState.players.find(p => p.playerId === playerId);
+  if (!player) return;
+  const updated = { ...player, preferredGroup: preferredGroup || 'ANY' };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'players', playerId), { preferredGroup: updated.preferredGroup }, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.players[playerId]) {
+      store.players[playerId] = updated;
+      saveLocalStore(store);
+    }
   }
 }
 
