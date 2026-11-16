@@ -463,6 +463,8 @@
             <option value="GOAL">⚽ Goal Scored</option>
             <option value="STAR">🌟 Effort Star / POTM Highlight</option>
             <option value="SAVE">🧤 Great Save</option>
+            <option value="YELLOW">🟨 Yellow Card</option>
+            <option value="RED">🟥 Red Card</option>
             <option value="NOTE">📝 Coach Tactical Note</option>
           </select>
         </div>
@@ -539,15 +541,20 @@
   </div>
 
   <!-- Hidden Printable Card for Image Export -->
-  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[720px] bg-slate-900 p-6 text-white font-sans">
-    <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[860px] bg-slate-950 p-7 text-white font-sans leading-normal">
+    <div class="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-5">
       <div>
-        <h1 class="text-2xl font-bold text-emerald-400" id="exportTitleText">Straffan AFC Team Sheet</h1>
-        <p class="text-slate-400 text-sm" id="exportDateText"></p>
+        <div class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-1">MatchDay Ready • Official Match Report & Team Sheet</div>
+        <h1 class="text-2xl font-extrabold text-white leading-snug" id="exportTitleText">Straffan AFC Team Sheet</h1>
+        <p class="text-slate-300 text-sm mt-1 font-medium" id="exportDateText"></p>
       </div>
-      <div class="text-right text-xs text-slate-400" id="exportFormationText">Formation: 7v7</div>
+      <div class="bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2 text-right">
+        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Format & Tactical Shape</div>
+        <div class="text-sm font-bold text-emerald-400 mt-0.5" id="exportFormationText">7v7 • GK-2-3-1</div>
+      </div>
     </div>
-    <div id="exportGrid" class="grid grid-cols-2 gap-4"></div>
+    <div id="exportGrid" class="grid grid-cols-2 gap-5"></div>
+    <div id="exportMatchFooter" class="mt-5 pt-3 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400"></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

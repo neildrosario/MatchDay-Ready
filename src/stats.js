@@ -39,7 +39,9 @@ export function renderStats() {
       ATT: 0,
       GOALS: 0,
       ASSISTS: 0,
-      STARS: 0
+      STARS: 0,
+      YELLOWS: 0,
+      REDS: 0
     };
   });
 
@@ -100,7 +102,7 @@ export function renderStats() {
         stats[pName].TOTAL += mins;
       });
 
-      // Tally Match Events (Goals, Assists, Saves, Effort Stars — Milestone 12)
+      // Tally Match Events (Goals, Assists, Saves, Effort Stars, Yellow/Red Cards — Milestone 12)
       (qObj.events || []).forEach(ev => {
         if (ev.player) {
           if (!stats[ev.player]) {
@@ -113,11 +115,15 @@ export function renderStats() {
               ATT: 0,
               GOALS: 0,
               ASSISTS: 0,
-              STARS: 0
+              STARS: 0,
+              YELLOWS: 0,
+              REDS: 0
             };
           }
           if (ev.type === 'GOAL') stats[ev.player].GOALS++;
           else if (ev.type === 'SAVE' || ev.type === 'STAR') stats[ev.player].STARS++;
+          else if (ev.type === 'YELLOW') stats[ev.player].YELLOWS = (stats[ev.player].YELLOWS || 0) + 1;
+          else if (ev.type === 'RED') stats[ev.player].REDS = (stats[ev.player].REDS || 0) + 1;
         }
         if (ev.assist) {
           if (!stats[ev.assist]) {
@@ -130,7 +136,9 @@ export function renderStats() {
               ATT: 0,
               GOALS: 0,
               ASSISTS: 0,
-              STARS: 0
+              STARS: 0,
+              YELLOWS: 0,
+              REDS: 0
             };
           }
           stats[ev.assist].ASSISTS++;
@@ -202,6 +210,16 @@ export function renderStats() {
                 ${
                   s.STARS > 0
                     ? `<span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded">🌟${s.STARS}</span>`
+                    : ''
+                }
+                ${
+                  (s.YELLOWS || 0) > 0
+                    ? `<span class="text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1 py-0.5 rounded">🟨${s.YELLOWS}</span>`
+                    : ''
+                }
+                ${
+                  (s.REDS || 0) > 0
+                    ? `<span class="text-[9px] bg-rose-600/30 text-rose-300 border border-rose-500/50 px-1 py-0.5 rounded">🟥${s.REDS}</span>`
                     : ''
                 }
               </div>

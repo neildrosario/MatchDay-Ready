@@ -522,6 +522,10 @@ export function renderPitch() {
               ? '🧤'
               : ev.type === 'STAR'
               ? '🌟'
+              : ev.type === 'YELLOW'
+              ? '🟨'
+              : ev.type === 'RED'
+              ? '🟥'
               : '📝';
           const pLabel = getPeriodShortLabel(ev.periodNum, periodCount);
           const minText = ev.minute ? ` ${ev.minute}` : '';
@@ -534,6 +538,10 @@ export function renderPitch() {
               ? 'Great Save'
               : ev.type === 'STAR'
               ? 'Effort Star'
+              : ev.type === 'YELLOW'
+              ? 'Yellow Card'
+              : ev.type === 'RED'
+              ? 'Red Card'
               : 'Note';
 
           return `
