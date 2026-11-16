@@ -50,6 +50,14 @@ import {
   copySquadSplitWhatsApp
 } from './splitter.js';
 import { exportTeamSheet } from './export.js';
+import {
+  initMatchTimer,
+  renderMatchTimer,
+  toggleMatchTimer,
+  resetMatchTimer,
+  acknowledgeMidSubAlert,
+  advanceToNextPeriodFromTimer
+} from './timer.js';
 
 let currentView = 'pitch';
 
@@ -114,6 +122,11 @@ Object.assign(window, {
   handlePublishSquadSplit,
   copySquadSplitWhatsApp,
   exportTeamSheet,
+  toggleMatchTimer,
+  resetMatchTimer,
+  acknowledgeMidSubAlert,
+  advanceToNextPeriodFromTimer,
+  renderMatchTimer,
   showAuthModal,
   hideAuthModal,
   toggleAuthMode,
@@ -129,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
   subscribeAppState(() => {
     renderAuthStatusBanner();
     renderPitch();
+    renderMatchTimer();
     renderAdminCoachesPanel();
     if (currentView === 'splitter') {
       renderSquadSplitter();
@@ -138,5 +152,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   initAuth();
+  initMatchTimer();
   renderPitch();
 });

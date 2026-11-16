@@ -204,6 +204,9 @@ export function updateMatchHistoryDropdown() {
 export function setQuarter(q) {
   appState.currentQuarter = q;
   renderPitch();
+  if (typeof window.renderMatchTimer === 'function') {
+    window.renderMatchTimer();
+  }
 }
 
 export async function onTeamSelectChange(teamId) {
