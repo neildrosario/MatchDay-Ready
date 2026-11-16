@@ -860,7 +860,7 @@ export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdIn
       : match.tacticalShape || getDefaultShapeForFormat(match.formation || '7v7');
 
   return existingQ
-    ? { ...existingQ, tacticalShape: resolvedShape }
+    ? { ...existingQ, tacticalShape: resolvedShape, events: existingQ.events || [] }
     : {
         lineupId: getLineupId(matchId, quarter),
         matchId,
@@ -870,8 +870,122 @@ export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdIn
         tacticalShape: resolvedShape,
         lineup: {},
         unavailablePlayers: [],
-        swaps: []
+        swaps: [],
+        events: []
       };
+}
+
+/**
+ * Milestone 11: Compute Season-to-Date Historical Fairness Seed (excluding `excludeDateStr`)
+ * Returns a map `{ [playerName]: { totalQtrs, GK, DEF, MID, ATT, rawTotalMins } }` so
+ * Auto-Fair Squad can automatically prioritize players who played fewer minutes or played GK in prior weeks.
+ */
+export function getHistoricalSeasonFairnessSeed(
+  teamId = appState.selectedTeamId,
+  excludeDateStr = appState.selectedDate
+) {
+  const team = getSelectedTeam();
+  const teamPlayers = getTeamPlayers(teamId);
+  const playerNames = teamPlayers.map(p => getPlayerDisplayName(p));
+  const currentMatch = getCurrentMatchDoc();
+  const baseUnitMins = parseFloat(currentMatch.qtrMins) || team.defaultQtrMins || 12;
+
+  const rawStats = {};
+  playerNames.forEach(pName => {
+    rawStats[pName] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
+  });
+
+  const allTeamMatches = Object.values(appState.allMatches || {}).filter(
+    m => m.teamId === teamId && m.date && m.date !== excludeDateStr
+  );
+
+  allTeamMatches.forEach(mDoc => {
+    const qtrMins = parseFloat(mDoc.qtrMins) || 12;
+    const format = mDoc.formation || '7v7';
+    const periods = getMatchPeriods(mDoc);
+    const quartersMap = appState.lineupsByMatch[mDoc.matchId] || {};
+    const playedThisMatch = new Set();
+
+    periods.forEach(q => {
+      const qObj = quartersMap[q];
+      if (!qObj) return;
+      const qData = qObj.lineup || {};
+      const swaps = qObj.swaps || [];
+      const activePositions = getPositionsForFormatAndShape(
+        format,
+        qObj.tacticalShape || mDoc.tacticalShape
+      );
+      const posGroupMap = {};
+      activePositions.forEach(pos => {
+        posGroupMap[pos.id] = pos.group;
+      });
+
+      activePositions.forEach(pos => {
+        const pName = qData[pos.id];
+        if (!pName) return;
+        const involvedSwap = swaps.find(
+          s => s.text && (s.text.includes(`at ${pos.id}`) || s.text.includes(`(${pos.id})`))
+        );
+        const mins = involvedSwap ? qtrMins / 2 : qtrMins;
+        if (!rawStats[pName]) {
+          rawStats[pName] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
+        }
+        rawStats[pName][pos.group] += mins;
+        rawStats[pName].TOTAL += mins;
+        playedThisMatch.add(pName);
+      });
+
+      swaps.forEach(sw => {
+        if (!sw.text) return;
+        const subMatch = sw.text.match(/^(.+) replaced (.+) at ([A-Z0-9]+)/);
+        if (subMatch) {
+          const outgoingPlayer = subMatch[2].trim();
+          const posId = subMatch[3].trim();
+          const group = posGroupMap[posId] || 'MID';
+          const halfMins = qtrMins / 2;
+          if (!rawStats[outgoingPlayer]) {
+            rawStats[outgoingPlayer] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
+          }
+          if (qData[posId] !== outgoingPlayer) {
+            rawStats[outgoingPlayer][group] += halfMins;
+            rawStats[outgoingPlayer].TOTAL += halfMins;
+            playedThisMatch.add(outgoingPlayer);
+          }
+        }
+      });
+    });
+
+    playedThisMatch.forEach(pName => {
+      if (rawStats[pName]) rawStats[pName].matchesPlayed++;
+    });
+  });
+
+  // Compute average historical total minutes among players who have appeared in at least 1 prior match
+  const activeHistPlayers = Object.values(rawStats).filter(s => s.TOTAL > 0);
+  const avgHistTotal =
+    activeHistPlayers.length > 0
+      ? activeHistPlayers.reduce((sum, s) => sum + s.TOTAL, 0) / activeHistPlayers.length
+      : 0;
+
+  const seed = {};
+  playerNames.forEach(pName => {
+    const s = rawStats[pName] || { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+    // Normalize offset so a player who played less than average starts with a negative offset (higher priority!)
+    let offsetPeriods = 0;
+    if (s.TOTAL > 0 && avgHistTotal > 0) {
+      offsetPeriods = Math.max(-1.5, Math.min(1.5, (s.TOTAL - avgHistTotal) / baseUnitMins));
+    }
+    seed[pName] = {
+      totalQtrs: Number(offsetPeriods.toFixed(2)),
+      GK: Number((s.GK / baseUnitMins).toFixed(2)),
+      DEF: Number((s.DEF / baseUnitMins).toFixed(2)),
+      MID: Number((s.MID / baseUnitMins).toFixed(2)),
+      ATT: Number((s.ATT / baseUnitMins).toFixed(2)),
+      rawTotalMins: s.TOTAL
+    };
+  });
+
+  return seed;
 }
 
 /**

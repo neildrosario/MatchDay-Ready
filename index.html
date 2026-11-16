@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="apple-touch-icon" href="/icon.svg">
   <title>MatchDay Ready — Club Edition (Straffan AFC)</title>
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-12 font-sans">
@@ -165,6 +171,9 @@
           </div>
           <span id="timerMidSubTarget" class="text-[10px] text-amber-300 font-semibold hidden sm:inline">50% Sub @ 06:00</span>
           <div class="flex items-center gap-1.5">
+            <button id="wakeLockBtn" onclick="toggleScreenWakeLock()" class="bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded font-semibold text-[10px]" title="Keep phone screen awake on the sideline">
+              🔆 Keep Awake
+            </button>
             <button id="timerToggleBtn" onclick="toggleMatchTimer()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded font-bold text-xs shadow">
               ▶ Start
             </button>
@@ -203,14 +212,23 @@
         </button>
       </div>
 
-      <!-- Action Toolbar (Auto-Fill & Swaps) -->
-      <div class="grid grid-cols-2 gap-2 mb-3">
-        <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
-          🪄 Auto-Fair Squad
-        </button>
-        <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
-          🔄 Mid-Qtr Swap
-        </button>
+      <!-- Action Toolbar (Auto-Fill, Swaps & Match Events — Milestones 11 & 12) -->
+      <div class="space-y-1.5 mb-3">
+        <div class="grid grid-cols-3 gap-1.5">
+          <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+            🪄 Auto-Fair
+          </button>
+          <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+            🔄 Mid-Sub
+          </button>
+          <button onclick="openEventModal()" class="bg-emerald-600 hover:bg-emerald-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+            ⚽ + Event
+          </button>
+        </div>
+        <label class="flex items-center justify-end gap-1.5 text-[11px] text-slate-300 cursor-pointer px-1">
+          <input type="checkbox" id="seasonFairnessCheckbox" checked class="rounded bg-slate-800 border-slate-600 text-indigo-500 focus:ring-0">
+          <span>⚖️ Balance Auto-Fair rotation with Season-to-Date minutes</span>
+        </label>
       </div>
 
       <!-- Dynamic Football Pitch Container -->
@@ -247,10 +265,19 @@
       <!-- Mid-Quarter Events Log -->
       <div id="swapLogContainer" class="hidden bg-slate-800/80 border border-amber-500/40 rounded-lg p-2.5 mb-3 text-xs">
         <div class="flex justify-between items-center mb-1">
-          <span class="font-bold text-amber-400">🔄 Mid-Quarter Changes Log (50/50 Minutes Split)</span>
+          <span class="font-bold text-amber-400">🔄 Mid-Period Changes Log (50/50 Minutes Split)</span>
           <button onclick="clearSwaps()" class="text-[10px] text-rose-400 underline">Reset Swaps</button>
         </div>
         <div id="swapLogList" class="space-y-1 text-slate-300"></div>
+      </div>
+
+      <!-- Match Events & Highlights Log (Milestone 12) -->
+      <div id="matchEventsContainer" class="hidden bg-slate-800/80 border border-emerald-500/40 rounded-lg p-2.5 mb-3 text-xs">
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="font-bold text-emerald-400">⚽ Match Highlights & Events Log</span>
+          <button onclick="openEventModal()" class="text-[10px] bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold">+ Add</button>
+        </div>
+        <div id="matchEventsList" class="space-y-1 text-slate-200"></div>
       </div>
 
       <!-- Bottom Actions -->
@@ -418,6 +445,43 @@
       <div class="flex gap-2">
         <button onclick="closeSwapModal()" class="flex-1 bg-slate-700 py-2 rounded font-semibold text-xs">Cancel</button>
         <button onclick="executeSwap()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2 rounded font-bold text-xs">Confirm Swap</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE SIDELINE MATCH EVENT MODAL (Milestone 12: Goals, Assists, Saves, Effort Stars) -->
+  <div id="eventModal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-4 text-white shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-emerald-400 text-sm">⚽ Log Match Event / Highlight</h3>
+        <button onclick="closeEventModal()" class="text-slate-400 font-bold">✕</button>
+      </div>
+      <div class="space-y-3 mb-4 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Event Type:</label>
+          <select id="eventTypeSelect" onchange="onEventTypeSelectChange(this.value)" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white font-bold">
+            <option value="GOAL">⚽ Goal Scored</option>
+            <option value="STAR">🌟 Effort Star / POTM Highlight</option>
+            <option value="SAVE">🧤 Great Save</option>
+            <option value="NOTE">📝 Coach Tactical Note</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Player:</label>
+          <select id="eventPlayerSelect" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white"></select>
+        </div>
+        <div id="eventAssistWrapper">
+          <label class="block text-slate-400 mb-1">👟 Assist By (Optional):</label>
+          <select id="eventAssistSelect" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white"></select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Short Note (Optional):</label>
+          <input type="text" id="eventNoteInput" placeholder="e.g. Great team passing move / 1v1 stop" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="closeEventModal()" class="flex-1 bg-slate-700 py-2 rounded font-semibold text-xs">Cancel</button>
+        <button onclick="executeLogEvent()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2 rounded font-bold text-xs">Save Highlight</button>
       </div>
     </div>
   </div>

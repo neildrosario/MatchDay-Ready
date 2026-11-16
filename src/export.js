@@ -51,6 +51,7 @@ export async function exportTeamSheet() {
         const subs = playerNames.filter(p => !assigned.has(p) && !unavailSet.has(p));
         const unavailList = Array.from(unavailSet);
         const swaps = qObj.swaps || [];
+        const events = qObj.events || [];
 
         // Get this specific quarter's active positions & rows
         const activePositions = getActivePositions(q);
@@ -96,6 +97,25 @@ export async function exportTeamSheet() {
           </div>
 
           <div>
+            ${
+              events.length > 0
+                ? `<div class="text-[10px] text-emerald-300 mb-1.5 border-t border-slate-700 pt-1"><strong>⚽ Highlights:</strong> ${events
+                    .map(ev => {
+                      const icon =
+                        ev.type === 'GOAL'
+                          ? '⚽'
+                          : ev.type === 'SAVE'
+                          ? '🧤'
+                          : ev.type === 'STAR'
+                          ? '🌟'
+                          : '📝';
+                      const ast = ev.assist ? ` (👟 ${ev.assist})` : '';
+                      const nt = ev.note ? ` [${ev.note}]` : '';
+                      return `${icon} ${ev.player || ''}${ast}${nt}`;
+                    })
+                    .join(' • ')}</div>`
+                : ''
+            }
             ${
               swaps.length > 0
                 ? `<div class="text-[10px] text-amber-300 mb-1.5 border-t border-slate-700 pt-1"><strong>🔄 Swaps:</strong> ${swaps

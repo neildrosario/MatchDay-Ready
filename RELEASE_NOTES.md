@@ -109,3 +109,27 @@ flowchart LR
   * **Pocket-Safe Wall-Clock Timer:** Anchored to `Date.now()` timestamps per match and period so locking a phone screen in a coach's pocket never causes timer drift.
   * **50% Mid-Period Sub Window Alert:** Flashes an amber alert banner (`🔔 50% Mid-Q1 Sub Window Due!`), triggers haptic vibration + audio chime, and provides a 1-tap **`🔄 Make Sub`** button to open the Mid-Period Swap modal.
   * **Full-Time Alert & Period Advancement:** Signals full time with a 1-tap **`⏭️ Go to Next Period`** button.
+
+---
+
+### Milestone 10: Installable Mobile PWA + "Keep Screen Awake" Sideline Mode
+* **Files:** [public/manifest.webmanifest](file:///home/neildrosario/MatchDay-Ready/public/manifest.webmanifest), [public/icon.svg](file:///home/neildrosario/MatchDay-Ready/public/icon.svg), [public/sw.js](file:///home/neildrosario/MatchDay-Ready/public/sw.js), [src/timer.js](file:///home/neildrosario/MatchDay-Ready/src/timer.js)
+* **What Was Built:**
+  * **Installable PWA:** Added Web App Manifest, vector tactical pitch icon, and offline Service Worker so coaches can tap **"Add to Home Screen"** on iOS and Android for a standalone full-screen experience.
+  * **Screen Wake Lock (`🔆 Keep Awake`):** Integrates `navigator.wakeLock` so the phone screen never dims or locks while the match timer is running on the touchline.
+
+---
+
+### Milestone 11: Season-Aware Fair Rotation ("Multi-Week Fairness Memory")
+* **Files:** [src/db.js](file:///home/neildrosario/MatchDay-Ready/src/db.js), [src/pitch.js](file:///home/neildrosario/MatchDay-Ready/src/pitch.js), [index.html](file:///home/neildrosario/MatchDay-Ready/index.html)
+* **What Was Built:**
+  * **Historical Fairness Engine (`getHistoricalSeasonFairnessSeed`):** Calculates each player's historical playing time deficit/surplus and positional history (`GK`, `DEF`, `MID`, `ATT`) across all prior match dates.
+  * **`⚖️ Balance Auto-Fair rotation with Season-to-Date minutes` Toggle:** Enabled by default so players who received fewer minutes or played `GK` in previous weeks automatically get prioritized in today's rotation.
+
+---
+
+### Milestone 12: Live Sideline Match Events & Highlights (Goals, Assists, Saves & Effort Stars)
+* **Files:** [src/pitch.js](file:///home/neildrosario/MatchDay-Ready/src/pitch.js), [src/stats.js](file:///home/neildrosario/MatchDay-Ready/src/stats.js), [src/export.js](file:///home/neildrosario/MatchDay-Ready/src/export.js), [index.html](file:///home/neildrosario/MatchDay-Ready/index.html)
+* **What Was Built:**
+  * **1-Tap Sideline Event Logger (`⚽ + Event`):** Log **⚽ Goals** (with optional **👟 Assist**), **🧤 Great Saves**, **🌟 Effort / POTM Stars**, and **📝 Coach Tactical Notes**, automatically stamped with the active period and live timer minute (`Q2 06'`).
+  * **Stats & Team Sheet Integration:** Displays `⚽`, `👟`, and `🌟` badges next to players in **📊 Squad & Stats** (per match and full season) and prints period highlights directly on the exported **📸 Share Sheet** PNG.

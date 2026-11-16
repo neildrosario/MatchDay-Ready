@@ -1,0 +1,18 @@
+{
+  "name": "MatchDay Ready — Straffan AFC",
+  "short_name": "MatchDay",
+  "description": "Club-Wide Football Matchday Tactics, Fair Rotation, Squad Splitter & Live Timer",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

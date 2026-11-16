@@ -13,6 +13,7 @@ import {
   getPlayerDisplayName,
   getCurrentMatchDoc,
   getQuarterLineupDoc,
+  getHistoricalSeasonFairnessSeed,
   getSharedPlayerConflicts,
   selectTeam,
   selectDate,
@@ -496,6 +497,70 @@ export function renderPitch() {
       swapContainer.classList.add('hidden');
     }
   }
+
+  // 6. Render Match Events & Highlights Log across all periods (Milestone 12)
+  const eventsContainer = document.getElementById('matchEventsContainer');
+  const eventsList = document.getElementById('matchEventsList');
+  if (eventsContainer && eventsList) {
+    const allMatchEvents = [];
+    const periods = getMatchPeriods(match);
+    periods.forEach(pNum => {
+      const pDoc = getQuarterLineupDoc(pNum);
+      (pDoc.events || []).forEach(ev => {
+        allMatchEvents.push({ ...ev, periodNum: pNum });
+      });
+    });
+
+    if (allMatchEvents.length > 0) {
+      eventsContainer.classList.remove('hidden');
+      eventsList.innerHTML = allMatchEvents
+        .map(ev => {
+          const icon =
+            ev.type === 'GOAL'
+              ? '⚽'
+              : ev.type === 'SAVE'
+              ? '🧤'
+              : ev.type === 'STAR'
+              ? '🌟'
+              : '📝';
+          const pLabel = getPeriodShortLabel(ev.periodNum, periodCount);
+          const minText = ev.minute ? ` ${ev.minute}` : '';
+          const assistText = ev.assist ? ` <span class="text-slate-400">(👟 Assist: ${ev.assist})</span>` : '';
+          const noteText = ev.note ? ` <span class="text-slate-400">— ${ev.note}</span>` : '';
+          const typeLabel =
+            ev.type === 'GOAL'
+              ? 'Goal'
+              : ev.type === 'SAVE'
+              ? 'Great Save'
+              : ev.type === 'STAR'
+              ? 'Effort Star'
+              : 'Note';
+
+          return `
+            <div class="flex items-center justify-between gap-2 bg-slate-900/60 px-2 py-1 rounded border border-slate-700/70">
+              <div class="truncate">
+                <span class="font-bold text-emerald-400">${pLabel}${minText}:</span>
+                <span>${icon} <strong>${ev.player || typeLabel}</strong> (${typeLabel})${assistText}${noteText}</span>
+              </div>
+              <button data-del-ev-period="${ev.periodNum}" data-del-ev-id="${ev.id}" class="del-match-ev-btn text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+            </div>
+          `;
+        })
+        .join('');
+
+      eventsList.querySelectorAll('.del-match-ev-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          removeMatchEvent(
+            Number(btn.getAttribute('data-del-ev-period')),
+            btn.getAttribute('data-del-ev-id')
+          );
+        });
+      });
+    } else {
+      eventsContainer.classList.add('hidden');
+      eventsList.innerHTML = '';
+    }
+  }
 }
 
 export function openSwapModal() {
@@ -580,6 +645,103 @@ export async function clearSwaps() {
   await saveQuarterLineup(q, { swaps: [] });
 }
 
+// --- MILESTONE 12: LIVE SIDELINE MATCH EVENTS (Goals, Assists, Saves, Effort Stars) ---
+export function openEventModal() {
+  const q = appState.currentQuarter;
+  const qObj = getQuarterLineupDoc(q);
+  const qData = qObj.lineup || {};
+  const unavailSet = new Set(qObj.unavailablePlayers || []);
+  const team = getSelectedTeam();
+  const playerNames = getTeamPlayers(team.teamId).map(p => getPlayerDisplayName(p));
+
+  const assigned = new Set(Object.values(qData).filter(Boolean));
+  const onPitch = playerNames.filter(p => assigned.has(p));
+  const onBench = playerNames.filter(p => !assigned.has(p) && !unavailSet.has(p));
+
+  const buildPlayerOptions = (placeholder = 'Select player...') => {
+    let html = `<option value="">${placeholder}</option>`;
+    if (onPitch.length > 0) {
+      html += `<optgroup label="Currently on Pitch">`;
+      onPitch.forEach(p => {
+        html += `<option value="${p.replace(/"/g, '&quot;')}">${p}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+    if (onBench.length > 0) {
+      html += `<optgroup label="Substitutes Bench">`;
+      onBench.forEach(p => {
+        html += `<option value="${p.replace(/"/g, '&quot;')}">${p}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+    return html;
+  };
+
+  const playerSel = document.getElementById('eventPlayerSelect');
+  const assistSel = document.getElementById('eventAssistSelect');
+  const noteInput = document.getElementById('eventNoteInput');
+  const typeSel = document.getElementById('eventTypeSelect');
+
+  if (playerSel) playerSel.innerHTML = buildPlayerOptions('Select player...');
+  if (assistSel) assistSel.innerHTML = buildPlayerOptions('None / Unassisted');
+  if (noteInput) noteInput.value = '';
+  if (typeSel) typeSel.value = 'GOAL';
+
+  onEventTypeSelectChange('GOAL');
+  document.getElementById('eventModal')?.classList.remove('hidden');
+}
+
+export function closeEventModal() {
+  document.getElementById('eventModal')?.classList.add('hidden');
+}
+
+export function onEventTypeSelectChange(typeVal) {
+  const assistWrap = document.getElementById('eventAssistWrapper');
+  if (assistWrap) {
+    assistWrap.classList.toggle('hidden', typeVal !== 'GOAL');
+  }
+}
+
+export async function executeLogEvent() {
+  const type = document.getElementById('eventTypeSelect')?.value || 'GOAL';
+  const player = document.getElementById('eventPlayerSelect')?.value || '';
+  const assist = type === 'GOAL' ? document.getElementById('eventAssistSelect')?.value || '' : '';
+  const note = document.getElementById('eventNoteInput')?.value.trim() || '';
+
+  if (type !== 'NOTE' && !player) {
+    return alert('Please select a player for this highlight.');
+  }
+  if (type === 'NOTE' && !note && !player) {
+    return alert('Please enter a note or select a player.');
+  }
+
+  const q = appState.currentQuarter;
+  const qObj = getQuarterLineupDoc(q);
+  const events = [...(qObj.events || [])];
+  const minute =
+    typeof window.getCurrentMatchMinuteString === 'function'
+      ? window.getCurrentMatchMinuteString()
+      : '';
+
+  events.push({
+    id: `ev_${Date.now()}`,
+    type,
+    player,
+    assist: assist && assist !== player ? assist : '',
+    note,
+    minute
+  });
+
+  await saveQuarterLineup(q, { events });
+  closeEventModal();
+}
+
+export async function removeMatchEvent(periodNum, eventId) {
+  const qObj = getQuarterLineupDoc(periodNum);
+  const updated = (qObj.events || []).filter(e => e.id !== eventId);
+  await saveQuarterLineup(periodNum, { events: updated });
+}
+
 export async function autoGenerateMatch() {
   const team = getSelectedTeam();
   const match = getCurrentMatchDoc();
@@ -601,11 +763,20 @@ export async function autoGenerateMatch() {
     return;
   }
 
+  const useSeasonFairness =
+    document.getElementById('seasonFairnessCheckbox')?.checked !== false;
+  const seasonSeed = useSeasonFairness
+    ? getHistoricalSeasonFairnessSeed(team.teamId, appState.selectedDate)
+    : {};
+
   const periodWord =
     periodCount === 2 ? '2 Halves' : periodCount === 3 ? '3 Thirds' : '4 Quarters';
+  const fairnessLabel = useSeasonFairness
+    ? 'Balancing with Season-to-Date minutes & specialist roles'
+    : 'Balancing within this match only';
   if (
     !confirm(
-      `Automatically schedule fair playing time and position rotation across ${periodWord} for ${team.name} (${match.formation})? (Specialist 🧤 GK & preferred positions will be respected).`
+      `Automatically schedule fair playing time and position rotation across ${periodWord} for ${team.name} (${match.formation})?\n\n• Mode: ${fairnessLabel}`
     )
   ) {
     return;
@@ -613,7 +784,14 @@ export async function autoGenerateMatch() {
 
   const tracking = {};
   playerNames.forEach(p => {
-    tracking[p] = { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+    const hist = seasonSeed[p] || { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+    tracking[p] = {
+      totalQtrs: hist.totalQtrs || 0,
+      GK: hist.GK || 0,
+      DEF: hist.DEF || 0,
+      MID: hist.MID || 0,
+      ATT: hist.ATT || 0
+    };
   });
 
   for (const q of periods) {

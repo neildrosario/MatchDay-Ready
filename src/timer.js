@@ -9,6 +9,8 @@ import { setQuarter, openSwapModal } from './pitch.js';
 const TIMER_STORAGE_KEY = 'matchday_live_timer_v1';
 
 let timerInterval = null;
+let wakeLockSentinel = null;
+let wakeLockDesired = false;
 
 function getTimerStateKey() {
   const match = getCurrentMatchDoc();
@@ -59,11 +61,78 @@ export function getElapsedMs() {
   return (t.accumulatedMs || 0) + Math.max(0, Date.now() - t.startedAt);
 }
 
+/**
+ * Milestone 12 helper: Returns current match period minute string (e.g. "06'")
+ */
+export function getCurrentMatchMinuteString() {
+  const elapsedMs = getElapsedMs();
+  if (elapsedMs <= 0) return '';
+  const mins = Math.max(1, Math.ceil(elapsedMs / 60000));
+  return `${mins}'`;
+}
+
 function formatMMSS(totalMs) {
   const totalSec = Math.floor(totalMs / 1000);
   const mins = Math.floor(totalSec / 60);
   const secs = totalSec % 60;
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+// --- MILESTONE 10: SCREEN WAKE LOCK API ---
+export async function requestScreenWakeLock() {
+  wakeLockDesired = true;
+  if (!('wakeLock' in navigator)) {
+    renderWakeLockButton();
+    return false;
+  }
+  try {
+    if (!wakeLockSentinel) {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null;
+        renderWakeLockButton();
+      });
+    }
+    renderWakeLockButton();
+    return true;
+  } catch (_) {
+    renderWakeLockButton();
+    return false;
+  }
+}
+
+export async function releaseScreenWakeLock() {
+  wakeLockDesired = false;
+  if (wakeLockSentinel) {
+    try {
+      await wakeLockSentinel.release();
+    } catch (_) {}
+    wakeLockSentinel = null;
+  }
+  renderWakeLockButton();
+}
+
+export async function toggleScreenWakeLock() {
+  if (wakeLockSentinel || wakeLockDesired) {
+    await releaseScreenWakeLock();
+  } else {
+    await requestScreenWakeLock();
+  }
+}
+
+function renderWakeLockButton() {
+  const btn = document.getElementById('wakeLockBtn');
+  if (!btn) return;
+  const active = Boolean(wakeLockSentinel) || wakeLockDesired;
+  if (active) {
+    btn.className =
+      'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-1 rounded font-bold text-[10px]';
+    btn.innerText = '🔆 Awake';
+  } else {
+    btn.className =
+      'bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded font-semibold text-[10px]';
+    btn.innerText = '🔆 Keep Awake';
+  }
 }
 
 function playSidelineBeep(frequencies = [880, 1174.66]) {
@@ -110,11 +179,12 @@ export function toggleMatchTimer() {
       accumulatedMs: elapsed
     });
   } else {
-    // Start / Resume
+    // Start / Resume -> also engage Screen Wake Lock automatically on the sideline!
     updateActivePeriodTimer({
       running: true,
       startedAt: Date.now()
     });
+    requestScreenWakeLock();
   }
   ensureIntervalLoop();
   renderMatchTimer();
@@ -126,6 +196,7 @@ export function resetMatchTimer() {
     startedAt: null,
     accumulatedMs: 0,
     midAlertAcked: false,
+    midSoundPlayed: false,
     endAlertFired: false
   });
   renderMatchTimer();
@@ -163,6 +234,9 @@ export function initMatchTimer() {
   ensureIntervalLoop();
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
+      if (wakeLockDesired) {
+        requestScreenWakeLock();
+      }
       renderMatchTimer();
     }
   });
@@ -170,6 +244,7 @@ export function initMatchTimer() {
 }
 
 export function renderMatchTimer() {
+  renderWakeLockButton();
   const match = getCurrentMatchDoc();
   const periods = getMatchPeriods(match);
   const periodCount = periods.length;

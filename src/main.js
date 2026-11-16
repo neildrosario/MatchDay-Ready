@@ -28,6 +28,10 @@ import {
   closeSwapModal,
   executeSwap,
   clearSwaps,
+  openEventModal,
+  closeEventModal,
+  onEventTypeSelectChange,
+  executeLogEvent,
   autoGenerateMatch,
   copyPreviousQuarter
 } from './pitch.js';
@@ -56,7 +60,9 @@ import {
   toggleMatchTimer,
   resetMatchTimer,
   acknowledgeMidSubAlert,
-  advanceToNextPeriodFromTimer
+  advanceToNextPeriodFromTimer,
+  toggleScreenWakeLock,
+  getCurrentMatchMinuteString
 } from './timer.js';
 
 let currentView = 'pitch';
@@ -105,6 +111,10 @@ Object.assign(window, {
   closeSwapModal,
   executeSwap,
   clearSwaps,
+  openEventModal,
+  closeEventModal,
+  onEventTypeSelectChange,
+  executeLogEvent,
   autoGenerateMatch,
   copyPreviousQuarter,
   renderStats,
@@ -126,6 +136,8 @@ Object.assign(window, {
   resetMatchTimer,
   acknowledgeMidSubAlert,
   advanceToNextPeriodFromTimer,
+  toggleScreenWakeLock,
+  getCurrentMatchMinuteString,
   renderMatchTimer,
   showAuthModal,
   hideAuthModal,
@@ -154,4 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initMatchTimer();
   renderPitch();
+
+  // Register PWA Service Worker (Milestone 10)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
 });

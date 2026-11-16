@@ -36,7 +36,10 @@ export function renderStats() {
       GK: 0,
       DEF: 0,
       MID: 0,
-      ATT: 0
+      ATT: 0,
+      GOALS: 0,
+      ASSISTS: 0,
+      STARS: 0
     };
   });
 
@@ -81,10 +84,57 @@ export function renderStats() {
         const mins = involvedSwap ? qtrMins / 2 : qtrMins;
 
         if (!stats[pName]) {
-          stats[pName] = { playerObj: null, TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+          stats[pName] = {
+            playerObj: null,
+            TOTAL: 0,
+            GK: 0,
+            DEF: 0,
+            MID: 0,
+            ATT: 0,
+            GOALS: 0,
+            ASSISTS: 0,
+            STARS: 0
+          };
         }
         stats[pName][group] += mins;
         stats[pName].TOTAL += mins;
+      });
+
+      // Tally Match Events (Goals, Assists, Saves, Effort Stars — Milestone 12)
+      (qObj.events || []).forEach(ev => {
+        if (ev.player) {
+          if (!stats[ev.player]) {
+            stats[ev.player] = {
+              playerObj: null,
+              TOTAL: 0,
+              GK: 0,
+              DEF: 0,
+              MID: 0,
+              ATT: 0,
+              GOALS: 0,
+              ASSISTS: 0,
+              STARS: 0
+            };
+          }
+          if (ev.type === 'GOAL') stats[ev.player].GOALS++;
+          else if (ev.type === 'SAVE' || ev.type === 'STAR') stats[ev.player].STARS++;
+        }
+        if (ev.assist) {
+          if (!stats[ev.assist]) {
+            stats[ev.assist] = {
+              playerObj: null,
+              TOTAL: 0,
+              GK: 0,
+              DEF: 0,
+              MID: 0,
+              ATT: 0,
+              GOALS: 0,
+              ASSISTS: 0,
+              STARS: 0
+            };
+          }
+          stats[ev.assist].ASSISTS++;
+        }
       });
 
       // Also credit outgoing substituted players with their 50% first-half of the quarter
@@ -97,7 +147,17 @@ export function renderStats() {
           const group = posGroupMap[posId] || 'MID';
           const halfMins = qtrMins / 2;
           if (!stats[outgoingPlayer]) {
-            stats[outgoingPlayer] = { playerObj: null, TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
+            stats[outgoingPlayer] = {
+              playerObj: null,
+              TOTAL: 0,
+              GK: 0,
+              DEF: 0,
+              MID: 0,
+              ATT: 0,
+              GOALS: 0,
+              ASSISTS: 0,
+              STARS: 0
+            };
           }
           // Only credit if outgoingPlayer is not currently occupying that slot
           if (qData[posId] !== outgoingPlayer) {
@@ -127,6 +187,21 @@ export function renderStats() {
                     ? `<span class="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1 py-0.5 rounded">Guest</span>`
                     : isShared
                     ? `<span class="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1 py-0.5 rounded">Shared 🔗</span>`
+                    : ''
+                }
+                ${
+                  s.GOALS > 0
+                    ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1 py-0.5 rounded">⚽${s.GOALS}</span>`
+                    : ''
+                }
+                ${
+                  s.ASSISTS > 0
+                    ? `<span class="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1 py-0.5 rounded">👟${s.ASSISTS}</span>`
+                    : ''
+                }
+                ${
+                  s.STARS > 0
+                    ? `<span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded">🌟${s.STARS}</span>`
                     : ''
                 }
               </div>
