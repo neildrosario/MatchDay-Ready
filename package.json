@@ -1,0 +1,22 @@
+{
+  "name": "matchday-ready",
+  "private": true,
+  "version": "2.0.0",
+  "description": "MatchDay Ready — Club-Wide Multi-Tenant Football Squad & Match Manager (Straffan AFC Edition)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.14.1",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "vite": "^5.4.10"
+  }
+}

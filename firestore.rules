@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to get user document
+    function getUserData() {
+      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    function isAdmin() {
+      return request.auth != null && getUserData() != null && getUserData().role == 'admin';
+    }
+
+    function isClubMember(clubId) {
+      return request.auth != null && getUserData() != null && getUserData().clubId == clubId;
+    }
+
+    function isAssignedTeam(teamId) {
+      return request.auth != null && getUserData() != null && (
+        getUserData().role == 'admin' ||
+        (getUserData().assignedTeamIds != null && teamId in getUserData().assignedTeamIds)
+      );
+    }
+
+    match /users/{userId} {
+      // Any authenticated coach can read their own profile or club peers; admins can manage any user
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /clubs/{clubId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && (isAdmin() || !exists(/databases/$(database)/documents/clubs/$(clubId)));
+    }
+
+    match /teams/{teamId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (
+        isAdmin() ||
+        isClubMember(request.resource.data.clubId)
+      );
+      allow update, delete: if request.auth != null && (
+        isAdmin() ||
+        isAssignedTeam(teamId) ||
+        isAssignedTeam(resource.data.teamId)
+      );
+    }
+
+    match /players/{playerId} {
+      allow read: if request.auth != null && isClubMember(resource.data.clubId);
+      allow create: if request.auth != null && isClubMember(request.resource.data.clubId);
+      allow update, delete: if request.auth != null && isClubMember(resource.data.clubId);
+    }
+
+    match /matches/{matchId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && isAssignedTeam(request.resource.data.teamId);
+      allow update, delete: if request.auth != null && isAssignedTeam(resource.data.teamId);
+    }
+
+    match /lineups/{lineupId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

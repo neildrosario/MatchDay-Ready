@@ -1,0 +1,1007 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  serverTimestamp
+} from 'firebase/firestore';
+import {
+  getFirebaseServices,
+  DEFAULT_CLUB_ID,
+  DEFAULT_CLUB_FULL_NAME
+} from './firebase.js';
+
+export const FORMATIONS = {
+  '5v5': [
+    { id: 'CM1', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 1 },
+    { id: 'CM2', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 1 },
+    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',   row: 2 },
+    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',   row: 2 },
+    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600',row: 3 }
+  ],
+  '6v6': [
+    { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+    { id: 'CM1', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 2 },
+    { id: 'CM2', label: 'CM',  group: 'MID', color: 'bg-amber-600', row: 2 },
+    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',   row: 3 },
+    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',   row: 3 },
+    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600',row: 4 }
+  ],
+  '7v7': [
+    { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
+    { id: 'LM',  label: 'LM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
+    { id: 'CM',  label: 'CM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
+    { id: 'RM',  label: 'RM',  group: 'MID', color: 'bg-amber-600',  row: 2 },
+    { id: 'LD',  label: 'LD',  group: 'DEF', color: 'bg-sky-600',    row: 3 },
+    { id: 'RD',  label: 'RD',  group: 'DEF', color: 'bg-sky-600',    row: 3 },
+    { id: 'GK',  label: 'GK',  group: 'GK',  color: 'bg-purple-600', row: 4 }
+  ]
+};
+
+const LOCAL_CLUB_STORE_KEY = 'matchday_club_store_v3';
+
+function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@straffanafc.ie', adminName = "Neil D'Rosario") {
+  const defaultPlayers = [
+    { firstName: 'Liam', lastName: "O'Connor", primary: 'u10_white', shared: true },
+    { firstName: 'Noah', lastName: 'Byrne', primary: 'u10_white', shared: true },
+    { firstName: 'Oliver', lastName: 'Doyle', primary: 'u10_white', shared: false },
+    { firstName: 'Jack', lastName: 'Ryan', primary: 'u10_white', shared: false },
+    { firstName: 'Harry', lastName: 'Walsh', primary: 'u10_white', shared: false },
+    { firstName: 'Charlie', lastName: 'Murphy', primary: 'u10_white', shared: false },
+    { firstName: 'Leo', lastName: 'Kelly', primary: 'u10_white', shared: false },
+    { firstName: 'Oscar', lastName: 'Dunn', primary: 'u10_white', shared: false },
+    { firstName: 'Max', lastName: 'Smith', primary: 'u10_white', shared: false },
+    { firstName: 'Lucas', lastName: 'Kavanagh', primary: 'u10_white', shared: false },
+    { firstName: 'Sam', lastName: 'Brown', primary: 'u10_green', shared: true },
+    { firstName: 'Ethan', lastName: 'Nolan', primary: 'u10_green', shared: true },
+    { firstName: 'Finn', lastName: 'Gallagher', primary: 'u10_green', shared: false },
+    { firstName: 'Cian', lastName: 'Farrell', primary: 'u10_green', shared: false },
+    { firstName: 'Tadhg', lastName: 'Brennan', primary: 'u10_green', shared: false },
+    { firstName: 'Rory', lastName: 'Maguire', primary: 'u10_green', shared: false },
+    { firstName: 'Darragh', lastName: 'Keane', primary: 'u10_green', shared: false },
+    { firstName: 'Senan', lastName: 'Healy', primary: 'u10_green', shared: false }
+  ];
+
+  const playersMap = {};
+  defaultPlayers.forEach((p, idx) => {
+    const id = `player_${idx + 1}_${p.firstName.toLowerCase()}`;
+    const displayName = `${p.firstName} ${p.lastName.charAt(0).toUpperCase()}.`;
+    playersMap[id] = {
+      playerId: id,
+      clubId: DEFAULT_CLUB_ID,
+      ageGroup: 'U10',
+      firstName: p.firstName,
+      lastName: p.lastName,
+      displayName,
+      primaryTeamId: p.primary,
+      allowedTeamIds: p.shared ? ['u10_white', 'u10_green'] : [p.primary]
+    };
+  });
+
+  return {
+    clubs: {
+      [DEFAULT_CLUB_ID]: {
+        clubId: DEFAULT_CLUB_ID,
+        name: DEFAULT_CLUB_FULL_NAME,
+        shortName: 'Straffan AFC',
+        createdAt: new Date().toISOString()
+      }
+    },
+    teams: {
+      u10_white: {
+        teamId: 'u10_white',
+        clubId: DEFAULT_CLUB_ID,
+        name: 'U10 White',
+        ageGroup: 'U10',
+        defaultFormation: '7v7',
+        defaultQtrMins: 12,
+        coachIds: [adminUid]
+      },
+      u10_green: {
+        teamId: 'u10_green',
+        clubId: DEFAULT_CLUB_ID,
+        name: 'U10 Green',
+        ageGroup: 'U10',
+        defaultFormation: '7v7',
+        defaultQtrMins: 12,
+        coachIds: [adminUid]
+      }
+    },
+    users: {
+      [adminUid]: {
+        uid: adminUid,
+        email: adminEmail,
+        displayName: adminName,
+        role: 'admin',
+        clubId: DEFAULT_CLUB_ID,
+        assignedTeamIds: ['u10_white', 'u10_green']
+      }
+    },
+    players: playersMap,
+    matches: {},
+    lineups: {}
+  };
+}
+
+// Reactive application state shared across UI modules
+export const appState = {
+  mode: 'local', // 'firebase' | 'local'
+  syncState: 'local', // 'synced' | 'syncing' | 'local' | 'error'
+  currentUser: null, // Firebase auth user or local user profile
+  userProfile: null, // Document from `users` collection
+  club: null,
+  teams: [], // Teams accessible to this user
+  allClubTeams: [], // All teams in club (for shared player badges & admin)
+  allClubUsers: [], // All coaches/admins in club (for Admin Coach Management 5B)
+  selectedTeamId: localStorage.getItem('matchday_selected_team_v3') || 'u10_white',
+  selectedDate: new Date().toISOString().split('T')[0],
+  currentQuarter: 1,
+  players: [], // All players in club/ageGroup
+  matchesByTeam: {}, // { [matchId]: matchDoc }
+  lineupsByMatch: {}, // { [matchId]: { 1: lineupDoc, 2: lineupDoc, 3: lineupDoc, 4: lineupDoc } }
+  sameDateLineupsAllTeams: [] // Used for real-time shared player conflict warnings
+};
+
+const listeners = new Set();
+let activeUnsubscribes = [];
+
+export function subscribeAppState(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+export function notifyAppState() {
+  listeners.forEach(fn => {
+    try {
+      fn(appState);
+    } catch (e) {
+      console.error('State listener error:', e);
+    }
+  });
+}
+
+// --- LOCAL MULTI-TENANT FALLBACK STORE ---
+function loadLocalStore() {
+  try {
+    const raw = localStorage.getItem(LOCAL_CLUB_STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.clubs && parsed.teams) return parsed;
+    }
+  } catch (e) {
+    console.warn('Error loading local store:', e);
+  }
+  const seed = createInitialSeedData();
+  localStorage.setItem(LOCAL_CLUB_STORE_KEY, JSON.stringify(seed));
+  return seed;
+}
+
+function saveLocalStore(store) {
+  localStorage.setItem(LOCAL_CLUB_STORE_KEY, JSON.stringify(store));
+  hydrateAppStateFromLocalStore(store);
+}
+
+export function hydrateAppStateFromLocalStore(storeInput) {
+  const store = storeInput || loadLocalStore();
+  appState.mode = 'local';
+  appState.syncState = 'local';
+  const uid = appState.currentUser?.uid || 'local_coach_1';
+  if (!store.users[uid]) {
+    store.users[uid] = {
+      uid,
+      email: appState.currentUser?.email || 'neil@straffanafc.ie',
+      displayName: appState.currentUser?.displayName || "Neil D'Rosario",
+      role: 'admin',
+      clubId: DEFAULT_CLUB_ID,
+      assignedTeamIds: ['u10_white', 'u10_green']
+    };
+  }
+  appState.userProfile = store.users[uid];
+  appState.club = store.clubs[DEFAULT_CLUB_ID] || {
+    clubId: DEFAULT_CLUB_ID,
+    name: DEFAULT_CLUB_FULL_NAME
+  };
+  appState.allClubTeams = Object.values(store.teams);
+  appState.allClubUsers = Object.values(store.users || {});
+  appState.teams = appState.allClubTeams.filter(
+    t =>
+      appState.userProfile.role === 'admin' ||
+      (appState.userProfile.assignedTeamIds || []).includes(t.teamId)
+  );
+  if (appState.teams.length > 0 && !appState.teams.some(t => t.teamId === appState.selectedTeamId)) {
+    appState.selectedTeamId = appState.teams[0].teamId;
+  }
+
+  appState.players = Object.values(store.players || {});
+  appState.matchesByTeam = {};
+  Object.values(store.matches || {}).forEach(m => {
+    if (m.teamId === appState.selectedTeamId) {
+      appState.matchesByTeam[m.matchId] = m;
+    }
+  });
+
+  appState.lineupsByMatch = {};
+  appState.sameDateLineupsAllTeams = [];
+  Object.values(store.lineups || {}).forEach(l => {
+    if (!appState.lineupsByMatch[l.matchId]) {
+      appState.lineupsByMatch[l.matchId] = {};
+    }
+    appState.lineupsByMatch[l.matchId][l.quarter] = l;
+    if (l.date === appState.selectedDate) {
+      appState.sameDateLineupsAllTeams.push(l);
+    }
+  });
+
+  notifyAppState();
+}
+
+// --- CLOUD FIRESTORE SEEDING & SUBSCRIPTIONS ---
+export async function ensureUserAndClubSeeded(firebaseUser) {
+  const { db, configured } = getFirebaseServices();
+  if (!configured || !db || !firebaseUser) return;
+
+  appState.syncState = 'syncing';
+  notifyAppState();
+
+  const clubRef = doc(db, 'clubs', DEFAULT_CLUB_ID);
+  const clubSnap = await getDoc(clubRef);
+
+  const userRef = doc(db, 'users', firebaseUser.uid);
+  const u10WhiteRef = doc(db, 'teams', 'u10_white');
+  const u10WhiteSnap = await getDoc(u10WhiteRef);
+
+  if (!clubSnap.exists() || !u10WhiteSnap.exists()) {
+    // Seed or migrate club initialization for Straffan AFC (U10 White & U10 Green for Neil D'Rosario)
+    const seed = createInitialSeedData(
+      firebaseUser.uid,
+      firebaseUser.email || 'neil@straffanafc.ie',
+      firebaseUser.displayName || "Neil D'Rosario"
+    );
+
+    await setDoc(clubRef, {
+      ...seed.clubs[DEFAULT_CLUB_ID],
+      createdAt: serverTimestamp()
+    }, { merge: true });
+
+    // Remove legacy u12_white / u12_blue if they were auto-seeded earlier
+    try {
+      await deleteDoc(doc(db, 'teams', 'u12_white'));
+      await deleteDoc(doc(db, 'teams', 'u12_blue'));
+    } catch (_) {}
+
+    for (const team of Object.values(seed.teams)) {
+      await setDoc(doc(db, 'teams', team.teamId), team);
+    }
+
+    for (const player of Object.values(seed.players)) {
+      await setDoc(doc(db, 'players', player.playerId), player);
+    }
+
+    await setDoc(userRef, seed.users[firebaseUser.uid], { merge: true });
+  } else {
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      // Check if an Admin pre-authorized this coach by email
+      const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+      let matchedInvite = null;
+      if (cleanEmail) {
+        const usersSnap = await getDocs(
+          query(collection(db, 'users'), where('clubId', '==', DEFAULT_CLUB_ID))
+        );
+        usersSnap.docs.forEach(d => {
+          const data = d.data();
+          if (
+            data.uid !== firebaseUser.uid &&
+            (data.email || '').trim().toLowerCase() === cleanEmail
+          ) {
+            matchedInvite = { docId: d.id, ...data };
+          }
+        });
+      }
+
+      if (matchedInvite) {
+        await setDoc(userRef, {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || matchedInvite.email,
+          displayName: firebaseUser.displayName || matchedInvite.displayName || 'Coach',
+          role: matchedInvite.role || 'coach',
+          clubId: DEFAULT_CLUB_ID,
+          assignedTeamIds: matchedInvite.assignedTeamIds || ['u10_white']
+        });
+        if (matchedInvite.docId.startsWith('invite_')) {
+          try {
+            await deleteDoc(doc(db, 'users', matchedInvite.docId));
+          } catch (_) {}
+        }
+      } else {
+        await setDoc(userRef, {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || 'neil@straffanafc.ie',
+          displayName: firebaseUser.displayName || "Neil D'Rosario",
+          role: 'admin',
+          clubId: DEFAULT_CLUB_ID,
+          assignedTeamIds: ['u10_white', 'u10_green']
+        });
+      }
+    }
+  }
+}
+
+export function clearFirestoreSubscriptions() {
+  activeUnsubscribes.forEach(unsub => {
+    try {
+      unsub();
+    } catch (_) {}
+  });
+  activeUnsubscribes = [];
+}
+
+export function startFirestoreSubscriptions(firebaseUser) {
+  clearFirestoreSubscriptions();
+  const { db, configured } = getFirebaseServices();
+  if (!configured || !db || !firebaseUser) return;
+
+  appState.mode = 'firebase';
+  appState.syncState = 'syncing';
+  notifyAppState();
+
+  const clubId = DEFAULT_CLUB_ID;
+
+  // 1. Subscribe to Club document
+  activeUnsubscribes.push(
+    onSnapshot(doc(db, 'clubs', clubId), snap => {
+      if (snap.exists()) {
+        appState.club = snap.data();
+        notifyAppState();
+      }
+    })
+  );
+
+  // 2. Subscribe to User profile & Club Users (for Admin Coach Management)
+  activeUnsubscribes.push(
+    onSnapshot(doc(db, 'users', firebaseUser.uid), snap => {
+      if (snap.exists()) {
+        appState.userProfile = snap.data();
+        filterAccessibleTeams();
+        notifyAppState();
+      }
+    })
+  );
+
+  activeUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'users'), where('clubId', '==', clubId)),
+      snap => {
+        appState.allClubUsers = snap.docs.map(d => d.data());
+        notifyAppState();
+      }
+    )
+  );
+
+  // 3. Subscribe to Club Teams
+  activeUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'teams'), where('clubId', '==', clubId)),
+      snap => {
+        appState.allClubTeams = snap.docs.map(d => d.data());
+        filterAccessibleTeams();
+        appState.syncState = 'synced';
+        notifyAppState();
+      },
+      err => {
+        console.error('Teams subscription error:', err);
+        appState.syncState = 'error';
+        notifyAppState();
+      }
+    )
+  );
+
+  // 4. Subscribe to Club Players
+  activeUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'players'), where('clubId', '==', clubId)),
+      snap => {
+        appState.players = snap.docs.map(d => d.data());
+        notifyAppState();
+      }
+    )
+  );
+
+  // 5. Subscribe to Matches & Lineups
+  activeUnsubscribes.push(
+    onSnapshot(collection(db, 'matches'), snap => {
+      const byTeam = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.teamId === appState.selectedTeamId) {
+          byTeam[data.matchId] = data;
+        }
+      });
+      appState.matchesByTeam = byTeam;
+      notifyAppState();
+    })
+  );
+
+  activeUnsubscribes.push(
+    onSnapshot(collection(db, 'lineups'), snap => {
+      const byMatch = {};
+      const sameDate = [];
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (!byMatch[data.matchId]) byMatch[data.matchId] = {};
+        byMatch[data.matchId][data.quarter] = data;
+        if (data.date === appState.selectedDate) {
+          sameDate.push(data);
+        }
+      });
+      appState.lineupsByMatch = byMatch;
+      appState.sameDateLineupsAllTeams = sameDate;
+      appState.syncState = 'synced';
+      notifyAppState();
+    })
+  );
+}
+
+function filterAccessibleTeams() {
+  if (!appState.userProfile) {
+    appState.teams = appState.allClubTeams;
+    return;
+  }
+  const { role, assignedTeamIds = [] } = appState.userProfile;
+  if (role === 'admin') {
+    appState.teams = [...appState.allClubTeams];
+  } else {
+    appState.teams = appState.allClubTeams.filter(t =>
+      assignedTeamIds.includes(t.teamId)
+    );
+  }
+  if (
+    appState.teams.length > 0 &&
+    !appState.teams.some(t => t.teamId === appState.selectedTeamId)
+  ) {
+    appState.selectedTeamId = appState.teams[0].teamId;
+    localStorage.setItem('matchday_selected_team_v3', appState.selectedTeamId);
+  }
+}
+
+// --- HELPER SELECTORS ---
+export function getSelectedTeam() {
+  return (
+    appState.teams.find(t => t.teamId === appState.selectedTeamId) ||
+    appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) || {
+      teamId: 'u10_white',
+      clubId: DEFAULT_CLUB_ID,
+      name: 'U10 White',
+      ageGroup: 'U10',
+      defaultFormation: '7v7',
+      defaultQtrMins: 12
+    }
+  );
+}
+
+export function getMatchId(teamId, dateStr) {
+  return `${teamId}_${dateStr}`;
+}
+
+export function getLineupId(matchId, quarter) {
+  return `${matchId}_q${quarter}`;
+}
+
+export function getTeamPlayers(teamId = appState.selectedTeamId) {
+  return appState.players
+    .filter(
+      p =>
+        p.primaryTeamId === teamId ||
+        (Array.isArray(p.allowedTeamIds) && p.allowedTeamIds.includes(teamId))
+    )
+    .sort((a, b) => {
+      // Primary team players first, then shared pool alphabetically
+      const aPrimary = a.primaryTeamId === teamId ? 0 : 1;
+      const bPrimary = b.primaryTeamId === teamId ? 0 : 1;
+      if (aPrimary !== bPrimary) return aPrimary - bPrimary;
+      return getPlayerDisplayName(a).localeCompare(getPlayerDisplayName(b));
+    });
+}
+
+export function getPlayerDisplayName(playerObjOrName) {
+  if (!playerObjOrName) return '';
+  if (typeof playerObjOrName === 'string') return playerObjOrName;
+  if (playerObjOrName.displayName) return playerObjOrName.displayName;
+  const lastInitial = playerObjOrName.lastName
+    ? ` ${playerObjOrName.lastName.trim()}"`
+    : '';
+  return `${playerObjOrName.firstName}${lastInitial}`.trim();
+}
+
+export function getCurrentMatchDoc() {
+  const team = getSelectedTeam();
+  const matchId = getMatchId(team.teamId, appState.selectedDate);
+  return (
+    appState.matchesByTeam[matchId] || {
+      matchId,
+      teamId: team.teamId,
+      date: appState.selectedDate,
+      opposition: '',
+      qtrMins: team.defaultQtrMins || 12,
+      formation: team.defaultFormation || '7v7'
+    }
+  );
+}
+
+export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdInput = null) {
+  const team = getSelectedTeam();
+  const matchId = matchIdInput || getMatchId(team.teamId, appState.selectedDate);
+  const byQ = appState.lineupsByMatch[matchId] || {};
+  return (
+    byQ[quarter] || {
+      lineupId: getLineupId(matchId, quarter),
+      matchId,
+      teamId: team.teamId,
+      date: appState.selectedDate,
+      quarter,
+      lineup: {},
+      unavailablePlayers: [],
+      swaps: []
+    }
+  );
+}
+
+/**
+ * Real-Time Shared Player Conflict Detection (Blueprint Section 4)
+ * Returns an array of conflicts if a player assigned to the current team in `quarter`
+ * is simultaneously assigned to another club team on the same date & quarter.
+ */
+export function getSharedPlayerConflicts(quarter = appState.currentQuarter) {
+  const currentTeam = getSelectedTeam();
+  const currentQDoc = getQuarterLineupDoc(quarter);
+  const currentAssignedPlayers = new Set(
+    Object.values(currentQDoc.lineup || {}).filter(Boolean)
+  );
+  if (currentAssignedPlayers.size === 0) return [];
+
+  const conflicts = [];
+  appState.sameDateLineupsAllTeams.forEach(otherLineup => {
+    if (
+      otherLineup.quarter === quarter &&
+      otherLineup.date === appState.selectedDate &&
+      otherLineup.teamId &&
+      otherLineup.teamId !== currentTeam.teamId
+    ) {
+      const otherTeam = appState.allClubTeams.find(t => t.teamId === otherLineup.teamId);
+      const otherTeamName = otherTeam ? otherTeam.name : otherLineup.teamId;
+      Object.entries(otherLineup.lineup || {}).forEach(([posId, playerName]) => {
+        if (playerName && currentAssignedPlayers.has(playerName)) {
+          conflicts.push({
+            playerName,
+            otherTeamName,
+            otherPosId: posId,
+            quarter
+          });
+        }
+      });
+    }
+  });
+  return conflicts;
+}
+
+// --- MUTATION FUNCTIONS (Optimistic + Firestore / Local Store) ---
+
+export async function selectTeam(teamId) {
+  appState.selectedTeamId = teamId;
+  localStorage.setItem('matchday_selected_team_v3', teamId);
+  if (appState.mode === 'firebase' && appState.currentUser) {
+    startFirestoreSubscriptions(appState.currentUser);
+  } else {
+    hydrateAppStateFromLocalStore();
+  }
+}
+
+export function selectDate(dateStr) {
+  if (!dateStr) return;
+  appState.selectedDate = dateStr;
+  if (appState.mode === 'firebase' && appState.currentUser) {
+    startFirestoreSubscriptions(appState.currentUser);
+  } else {
+    hydrateAppStateFromLocalStore();
+  }
+}
+
+export async function saveMatchMetadata(updates) {
+  const current = getCurrentMatchDoc();
+  const updatedMatch = {
+    ...current,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+    updatedBy: appState.currentUser?.uid || 'local_coach_1'
+  };
+
+  // Optimistic update
+  appState.matchesByTeam[updatedMatch.matchId] = updatedMatch;
+  notifyAppState();
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    appState.syncState = 'syncing';
+    notifyAppState();
+    await setDoc(doc(db, 'matches', updatedMatch.matchId), updatedMatch, { merge: true });
+    appState.syncState = 'synced';
+    notifyAppState();
+  } else {
+    const store = loadLocalStore();
+    store.matches[updatedMatch.matchId] = updatedMatch;
+    saveLocalStore(store);
+  }
+}
+
+export async function saveQuarterLineup(quarter, updates) {
+  const match = getCurrentMatchDoc();
+  const currentQ = getQuarterLineupDoc(quarter, match.matchId);
+  const updatedLineup = {
+    ...currentQ,
+    ...updates,
+    lineupId: getLineupId(match.matchId, quarter),
+    matchId: match.matchId,
+    teamId: match.teamId,
+    date: match.date,
+    quarter
+  };
+
+  // Ensure the parent match doc exists as well
+  if (!appState.matchesByTeam[match.matchId]) {
+    await saveMatchMetadata({});
+  }
+
+  // Optimistic update
+  if (!appState.lineupsByMatch[match.matchId]) {
+    appState.lineupsByMatch[match.matchId] = {};
+  }
+  appState.lineupsByMatch[match.matchId][quarter] = updatedLineup;
+  notifyAppState();
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    appState.syncState = 'syncing';
+    notifyAppState();
+    await setDoc(doc(db, 'lineups', updatedLineup.lineupId), updatedLineup, { merge: true });
+    appState.syncState = 'synced';
+    notifyAppState();
+  } else {
+    const store = loadLocalStore();
+    store.lineups[updatedLineup.lineupId] = updatedLineup;
+    saveLocalStore(store);
+  }
+}
+
+export async function addClubPlayer({ firstName, lastName, primaryTeamId, sharedWithTeamIds = [] }) {
+  const team = getSelectedTeam();
+  const cleanFirst = firstName.trim();
+  const cleanLast = (lastName || '').trim();
+  if (!cleanFirst) return;
+
+  const displayName = cleanLast ? `${cleanFirst} ${cleanLast}` : cleanFirst;
+  const playerId = `player_${Date.now()}_${cleanFirst.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+  const allowed = Array.from(new Set([primaryTeamId || team.teamId, ...sharedWithTeamIds]));
+
+  const newPlayer = {
+    playerId,
+    clubId: DEFAULT_CLUB_ID,
+    ageGroup: team.ageGroup || 'U10',
+    firstName: cleanFirst,
+    lastName: cleanLast,
+    displayName,
+    primaryTeamId: primaryTeamId || team.teamId,
+    allowedTeamIds: allowed
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'players', playerId), newPlayer);
+  } else {
+    const store = loadLocalStore();
+    store.players[playerId] = newPlayer;
+    saveLocalStore(store);
+  }
+}
+
+export async function togglePlayerSharedAccess(playerId, targetTeamId) {
+  const player = appState.players.find(p => p.playerId === playerId);
+  if (!player) return;
+
+  const currentAllowed = new Set(player.allowedTeamIds || [player.primaryTeamId]);
+  if (currentAllowed.has(targetTeamId) && player.primaryTeamId !== targetTeamId) {
+    currentAllowed.delete(targetTeamId);
+  } else {
+    currentAllowed.add(targetTeamId);
+  }
+  const updated = {
+    ...player,
+    allowedTeamIds: Array.from(currentAllowed)
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'players', playerId), updated, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    store.players[playerId] = updated;
+    saveLocalStore(store);
+  }
+}
+
+export async function removeClubPlayer(playerId) {
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'players', playerId));
+  } else {
+    const store = loadLocalStore();
+    delete store.players[playerId];
+    saveLocalStore(store);
+  }
+}
+
+/**
+ * Milestone 5C: Bulk add players from a pasted newline/comma list (e.g. WhatsApp / Excel)
+ */
+export async function bulkAddClubPlayers({ rawText, primaryTeamId, sharedWithTeamIds = [] }) {
+  const team = getSelectedTeam();
+  const targetPrimary = primaryTeamId || team.teamId;
+  const lines = (rawText || '')
+    .split(/[\r\n,]+/)
+    .map(l => l.replace(/^\s*\d+[\.\)\-]?\s*/, '').trim()) // strip leading numbers like "1. " or "2) "
+    .filter(Boolean);
+
+  if (lines.length === 0) return 0;
+
+  let addedCount = 0;
+  for (const full of lines) {
+    const parts = full.split(/\s+/);
+    const firstName = parts[0];
+    const lastName = parts.slice(1).join(' ');
+    if (firstName) {
+      await addClubPlayer({
+        firstName,
+        lastName,
+        primaryTeamId: targetPrimary,
+        sharedWithTeamIds
+      });
+      addedCount++;
+    }
+  }
+  return addedCount;
+}
+
+/**
+ * Milestone 5C: Clear primary players of the selected team (e.g. to wipe sample names before pasting real squad)
+ */
+export async function clearCurrentTeamPlayers(teamId = appState.selectedTeamId) {
+  const toRemove = appState.players.filter(p => p.primaryTeamId === teamId);
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    for (const p of toRemove) {
+      await deleteDoc(doc(db, 'players', p.playerId));
+    }
+  } else {
+    const store = loadLocalStore();
+    toRemove.forEach(p => {
+      delete store.players[p.playerId];
+    });
+    saveLocalStore(store);
+  }
+  return toRemove.length;
+}
+
+/**
+ * Milestone 5B: Club Admin — Pre-authorize or invite a coach by email and assign teams/role
+ */
+export async function inviteOrPreAuthorizeCoach({
+  email,
+  displayName,
+  role = 'coach',
+  assignedTeamIds = []
+}) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) throw new Error('Coach email is required.');
+
+  const cleanName =
+    (displayName || '').trim() || cleanEmail.split('@')[0];
+  const uid = `invite_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+  const defaultTeams =
+    assignedTeamIds.length > 0 ? assignedTeamIds : [appState.selectedTeamId];
+
+  const coachDoc = {
+    uid,
+    email: cleanEmail,
+    displayName: cleanName,
+    role,
+    clubId: DEFAULT_CLUB_ID,
+    assignedTeamIds: defaultTeams,
+    isInvite: true
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), coachDoc, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    store.users[uid] = coachDoc;
+    saveLocalStore(store);
+  }
+  return coachDoc;
+}
+
+export async function updateCoachRole(uid, newRole) {
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user) return;
+  const updated = { ...user, role: newRole };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.users[uid]) {
+      store.users[uid] = updated;
+      saveLocalStore(store);
+    }
+  }
+}
+
+export async function toggleCoachTeamAssignment(uid, teamId) {
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user) return;
+  const current = new Set(user.assignedTeamIds || []);
+  if (current.has(teamId)) {
+    current.delete(teamId);
+  } else {
+    current.add(teamId);
+  }
+  const assignedTeamIds = Array.from(current);
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), { assignedTeamIds }, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.users[uid]) {
+      store.users[uid].assignedTeamIds = assignedTeamIds;
+      saveLocalStore(store);
+    }
+  }
+}
+
+export async function removeCoachProfile(uid) {
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'users', uid));
+  } else {
+    const store = loadLocalStore();
+    delete store.users[uid];
+    saveLocalStore(store);
+  }
+}
+
+export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7', defaultQtrMins = 12 }) {
+  const cleanName = name.trim();
+  if (!cleanName) return;
+  const teamId = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  const newTeam = {
+    teamId,
+    clubId: DEFAULT_CLUB_ID,
+    name: cleanName,
+    ageGroup: (ageGroup || 'U10').trim(),
+    defaultFormation,
+    defaultQtrMins: parseFloat(defaultQtrMins) || 12,
+    coachIds: [appState.currentUser?.uid || 'local_coach_1']
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'teams', teamId), newTeam, { merge: true });
+    if (appState.userProfile) {
+      const assigned = Array.from(new Set([...(appState.userProfile.assignedTeamIds || []), teamId]));
+      await setDoc(
+        doc(db, 'users', appState.userProfile.uid),
+        { assignedTeamIds: assigned },
+        { merge: true }
+      );
+    }
+  } else {
+    const store = loadLocalStore();
+    store.teams[teamId] = newTeam;
+    const uid = appState.userProfile?.uid || 'local_coach_1';
+    if (store.users[uid]) {
+      store.users[uid].assignedTeamIds = Array.from(
+        new Set([...(store.users[uid].assignedTeamIds || []), teamId])
+      );
+    }
+    saveLocalStore(store);
+  }
+
+  return newTeam;
+}
+
+/**
+ * Migrate legacy single-file LocalStorage data (`uFootballAppV7` / `V6` / `V5`) into the currently selected team
+ */
+export async function importLegacyPrototypeData() {
+  const raw =
+    localStorage.getItem('uFootballAppV7') ||
+    localStorage.getItem('uFootballAppV6') ||
+    localStorage.getItem('uFootballAppV5');
+
+  if (!raw) {
+    throw new Error('No legacy beta data (uFootballAppV7) found in this browser.');
+  }
+
+  const legacy = JSON.parse(raw);
+  const team = getSelectedTeam();
+  const existingNames = new Set(appState.players.map(p => getPlayerDisplayName(p).toLowerCase()));
+
+  // 1. Import players
+  for (const pName of legacy.players || []) {
+    if (!existingNames.has(pName.trim().toLowerCase())) {
+      await addClubPlayer({
+        firstName: pName.trim(),
+        lastName: '',
+        primaryTeamId: team.teamId,
+        sharedWithTeamIds: []
+      });
+    }
+  }
+
+  // 2. Import matches & quarters
+  const matchesObj = legacy.matches || {};
+  for (const [dateStr, mData] of Object.entries(matchesObj)) {
+    const matchId = getMatchId(team.teamId, dateStr);
+    const matchDoc = {
+      matchId,
+      teamId: team.teamId,
+      date: dateStr,
+      opposition: mData.opposition || '',
+      qtrMins: parseFloat(legacy.qtrMins) || team.defaultQtrMins || 12,
+      formation: legacy.formation || team.defaultFormation || '7v7',
+      updatedAt: new Date().toISOString(),
+      updatedBy: appState.currentUser?.uid || 'local_coach_1'
+    };
+
+    if (appState.mode === 'firebase') {
+      const { db } = getFirebaseServices();
+      await setDoc(doc(db, 'matches', matchId), matchDoc, { merge: true });
+    } else {
+      const store = loadLocalStore();
+      store.matches[matchId] = matchDoc;
+      saveLocalStore(store);
+    }
+
+    for (const q of [1, 2, 3, 4]) {
+      const qData = mData[q];
+      if (!qData) continue;
+      const lineupId = getLineupId(matchId, q);
+      const lineupDoc = {
+        lineupId,
+        matchId,
+        teamId: team.teamId,
+        date: dateStr,
+        quarter: q,
+        lineup: qData.lineup || {},
+        unavailablePlayers: qData.unavailable || [],
+        swaps: qData.swaps || []
+      };
+
+      if (appState.mode === 'firebase') {
+        const { db } = getFirebaseServices();
+        await setDoc(doc(db, 'lineups', lineupId), lineupDoc, { merge: true });
+      } else {
+        const store = loadLocalStore();
+        store.lineups[lineupId] = lineupDoc;
+        saveLocalStore(store);
+      }
+    }
+  }
+}

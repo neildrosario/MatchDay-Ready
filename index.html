@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MatchDay Ready — Club Edition (Straffan AFC)</title>
+</head>
+<body class="bg-slate-900 text-white min-h-screen pb-12 font-sans">
+
+  <!-- Top Bar -->
+  <header class="bg-slate-800 p-3 border-b border-slate-700 sticky top-0 z-20 shadow-md space-y-2">
+    <div class="flex flex-wrap justify-between items-center gap-2">
+      <div class="flex items-center gap-2">
+        <span class="font-bold text-emerald-400 text-base">⚽ MatchDay Ready</span>
+        <span id="clubTitleBadge" class="text-[10px] bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded font-semibold">Straffan AFC</span>
+        <span id="syncStatus" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Local Mode</span>
+      </div>
+      <div class="flex items-center gap-1.5 text-sm">
+        <div class="flex items-center bg-slate-700 px-2 py-1 rounded border border-slate-600">
+          <input type="number" id="qtrMins" value="12" min="5" max="30" step="0.5" class="w-10 bg-transparent text-center font-bold text-xs" onchange="onConfigQtrMinsChange(this.value)">
+          <span class="text-[10px] text-slate-300">m/q</span>
+        </div>
+        <select id="formationSelect" onchange="onFormationChange(this.value)" class="bg-slate-700 text-white font-bold px-2 py-1 rounded border border-slate-600 text-xs">
+          <option value="5v5">5 v 5</option>
+          <option value="6v6">6 v 6</option>
+          <option value="7v7" selected>7 v 7</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Club Team Selector & Coach Profile Row -->
+    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-700/70">
+      <div class="flex items-center gap-1.5 flex-1">
+        <span class="text-[11px] font-bold text-slate-400">Team:</span>
+        <select id="teamSelector" onchange="onTeamSelectChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
+          <option value="u10_white">🛡️ U10 White (U10)</option>
+          <option value="u10_green">🛡️ U10 Green (U10)</option>
+        </select>
+      </div>
+      <button onclick="showAuthModal()" id="coachProfileBadge" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold">
+        👤 Neil D'Rosario
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-md mx-auto p-3">
+
+    <!-- CLUB & FIREBASE CLOUD SETTINGS ACCORDION -->
+    <details class="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 mb-3 text-xs">
+      <summary class="font-bold text-slate-300 cursor-pointer flex justify-between items-center">
+        <span>⚙️ Club & Firebase Cloud Settings</span>
+        <span id="configBadge" class="text-[10px] text-emerald-400">Tap to configure</span>
+      </summary>
+      <div class="mt-2.5 pt-2.5 border-t border-slate-700 space-y-3">
+        <!-- Firebase Project Config Paste Box -->
+        <div>
+          <p class="text-[11px] text-slate-300 font-semibold mb-1">🔥 Connect Firebase Project (Firestore + Auth):</p>
+          <p class="text-[10px] text-slate-400 mb-1.5">Paste your Firebase Web App config object or JSON below (or set <code class="text-emerald-400">.env</code> variables):</p>
+          <textarea id="firebaseConfigInput" rows="3" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "..."}' class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-[11px] text-white font-mono"></textarea>
+          <div class="flex justify-between items-center mt-1.5">
+            <button onclick="handleSaveFirebaseConfigUI()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold text-[11px]">Save & Connect Firebase</button>
+            <div class="flex gap-2">
+              <button onclick="showAuthModal()" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded font-bold text-[11px]">Coach Login</button>
+              <button onclick="handleDisconnectFirebaseUI()" class="text-rose-400 underline text-[10px]">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add New Club Team -->
+        <div class="pt-2 border-t border-slate-700/70">
+          <p class="text-[11px] text-slate-300 font-semibold mb-1.5">🛡️ Add New Club Team (Straffan AFC):</p>
+          <div class="flex gap-1.5">
+            <input type="text" id="newTeamNameInput" placeholder="e.g. U10 Blue" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+            <input type="text" id="newTeamAgeInput" placeholder="U10" value="U10" class="w-14 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-center text-white">
+            <select id="newTeamFormatSelect" class="bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+              <option value="5v5">5v5</option>
+              <option value="6v6">6v6</option>
+              <option value="7v7" selected>7v7</option>
+            </select>
+            <button onclick="handleCreateTeamUI()" class="bg-sky-600 hover:bg-sky-500 px-2.5 py-1 rounded font-bold text-[11px]">+ Team</button>
+          </div>
+        </div>
+
+        <!-- Milestone 5B: Club Admin Coach & Team Permissions Manager -->
+        <div id="adminCoachesSection" class="pt-2 border-t border-slate-700/70 space-y-2">
+          <p class="text-[11px] text-emerald-400 font-bold">👥 Admin: Manage Coaches & Team Access</p>
+          <div class="bg-slate-900/60 p-2 rounded border border-slate-700 space-y-2">
+            <p class="text-[10px] text-slate-400">Pre-authorize a coach by email and assign their teams:</p>
+            <div class="flex gap-1.5">
+              <input type="text" id="inviteCoachNameInput" placeholder="Coach Name" class="w-28 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+              <input type="email" id="inviteCoachEmailInput" placeholder="coach@straffanafc.ie" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+              <select id="inviteCoachRoleSelect" class="bg-slate-900 px-1.5 py-1 rounded border border-slate-600 text-[11px] text-white font-semibold">
+                <option value="coach" selected>Coach</option>
+                <option value="admin">Admin</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </div>
+            <div id="inviteCoachTeamCheckboxes" class="flex flex-wrap gap-1.5"></div>
+            <button onclick="handleInviteCoachUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-1.5 rounded font-bold text-[11px]">+ Authorize Coach & Assign Teams</button>
+          </div>
+
+          <div class="space-y-1.5 max-h-52 overflow-y-auto" id="adminCoachesList"></div>
+        </div>
+
+        <!-- Migrate Legacy Prototype Data -->
+        <div class="pt-2 border-t border-slate-700/70 flex justify-between items-center">
+          <span class="text-[11px] text-slate-400">Have local data from the Beta Prototype?</span>
+          <button onclick="handleImportLegacyUI()" class="bg-amber-600/80 hover:bg-amber-500 px-2.5 py-1 rounded font-bold text-[11px]">📥 Import Beta Data</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- MATCH DATE & OPPOSITION BAR -->
+    <div class="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 mb-3 space-y-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs font-bold text-slate-400">Match Date:</span>
+        <input type="date" id="matchDate" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" onchange="onDateInputChange(this.value)">
+      </div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-xs font-bold text-slate-400">Opposition:</span>
+        <input type="text" id="oppositionInput" placeholder="e.g. Kill Celtic / Maynooth" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" oninput="onOppositionInputChange(this.value)">
+      </div>
+      <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-700/60">
+        <span class="text-xs font-bold text-slate-400">Saved Matches:</span>
+        <select id="matchHistorySelect" onchange="onDateInputChange(this.value)" class="bg-slate-900 text-xs px-2 py-1 rounded border border-slate-600 text-white flex-1 font-semibold">
+          <option value="">-- Jump to Saved Match --</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- VIEW SELECTOR BAR -->
+    <div class="bg-slate-800 p-1 rounded-lg border border-slate-700 mb-3 flex gap-1">
+      <button onclick="switchView('pitch')" id="nav-pitch" class="flex-1 py-2 text-center font-bold text-xs rounded bg-emerald-600 text-white shadow">🏟️ Pitch & Lineup</button>
+      <button onclick="switchView('stats')" id="nav-stats" class="flex-1 py-2 text-center font-bold text-xs rounded bg-slate-900 text-slate-400">📊 Squad & Stats</button>
+    </div>
+
+    <!-- REAL-TIME SHARED ROSTER CONFLICT BANNER (Blueprint Section 4.2) -->
+    <div id="conflictWarningBanner" class="hidden bg-amber-500/20 border border-amber-500/60 rounded-lg p-2.5 mb-3 text-xs text-amber-200">
+      <div class="font-bold text-amber-300 mb-0.5">⚡ Shared Age-Group Roster Conflict Detected</div>
+      <div id="conflictWarningList" class="space-y-0.5 text-[11px]"></div>
+    </div>
+
+    <!-- VIEW 1: MATCH PITCH -->
+    <div id="view-pitch">
+      <!-- Quarter Selector -->
+      <div class="grid grid-cols-4 gap-2 mb-3">
+        <button onclick="setQuarter(1)" id="qbtn-1" class="q-btn py-2 rounded font-bold bg-emerald-600 text-white text-sm shadow">Q1</button>
+        <button onclick="setQuarter(2)" id="qbtn-2" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q2</button>
+        <button onclick="setQuarter(3)" id="qbtn-3" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q3</button>
+        <button onclick="setQuarter(4)" id="qbtn-4" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q4</button>
+      </div>
+
+      <!-- Action Toolbar (Auto-Fill & Swaps) -->
+      <div class="grid grid-cols-2 gap-2 mb-3">
+        <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+          🪄 Auto-Fair Squad
+        </button>
+        <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+          🔄 Mid-Qtr Swap
+        </button>
+      </div>
+
+      <!-- Dynamic Football Pitch Container -->
+      <div id="pitchContainer" class="pitch-bg relative rounded-xl border-4 border-white/80 p-4 shadow-xl flex flex-col justify-between mb-3 h-[440px]">
+        <!-- Pitch Markings -->
+        <div class="absolute inset-x-0 top-1/2 border-t-2 border-white/40 pointer-events-none"></div>
+        <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/40 pointer-events-none"></div>
+        
+        <!-- Pitch Slot Rows -->
+        <div id="pitchSlots" class="relative z-10 flex flex-col justify-between h-full py-1"></div>
+      </div>
+
+      <!-- Substitutes Bench & Unavailable Section -->
+      <div class="bg-slate-800 rounded-lg p-3 border border-slate-700 mb-3 space-y-3">
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Available Substitutes (This Quarter)</h3>
+            <span id="subCountBadge" class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">0 available</span>
+          </div>
+          <div id="subsBench" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <div class="border-t border-slate-700 pt-2.5">
+          <details class="group">
+            <summary class="text-xs font-bold text-slate-400 cursor-pointer flex justify-between items-center">
+              <span>🚫 Mark Players Unavailable / Resting This Week</span>
+              <span id="unavailableCountBadge" class="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400">0 off</span>
+            </summary>
+            <div id="unavailableCheckboxes" class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700/60"></div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Mid-Quarter Events Log -->
+      <div id="swapLogContainer" class="hidden bg-slate-800/80 border border-amber-500/40 rounded-lg p-2.5 mb-3 text-xs">
+        <div class="flex justify-between items-center mb-1">
+          <span class="font-bold text-amber-400">🔄 Mid-Quarter Changes Log (50/50 Minutes Split)</span>
+          <button onclick="clearSwaps()" class="text-[10px] text-rose-400 underline">Reset Swaps</button>
+        </div>
+        <div id="swapLogList" class="space-y-1 text-slate-300"></div>
+      </div>
+
+      <!-- Bottom Actions -->
+      <div class="flex gap-2 pb-6">
+        <button onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
+        <button onclick="exportTeamSheet()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
+      </div>
+    </div>
+
+    <!-- VIEW 2: PLAYER DASHBOARD & CLUB ROSTER -->
+    <div id="view-stats" class="hidden pb-12">
+      <!-- Add Player & Bulk Paste Squad (Milestone 5C) -->
+      <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 mb-3 space-y-2.5">
+        <div class="flex justify-between items-center">
+          <h3 class="text-sm font-bold">Squad & Shared Age-Group Roster</h3>
+          <button onclick="handleClearTeamPlayersUI()" class="text-[10px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-semibold">
+            🧹 Clear Team Players
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <input type="text" id="newPlayerName" placeholder="Add player (e.g. Liam O'Connor)..." class="flex-1 bg-slate-900 px-3 py-1.5 rounded border border-slate-700 text-sm">
+          <button onclick="handleAddPlayerUI()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-1.5 rounded font-bold text-sm">Add</button>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer pt-0.5">
+          <input type="checkbox" id="shareAcrossAgeGroupCheckbox" class="rounded bg-slate-900 border-slate-600 text-emerald-500">
+          <span>🔗 Make available across all teams in this age group (Shared Pool)</span>
+        </label>
+
+        <!-- Bulk Paste Players Drawer -->
+        <details class="border-t border-slate-700/70 pt-2 text-xs">
+          <summary class="font-bold text-emerald-400 cursor-pointer flex justify-between items-center">
+            <span>📋 Bulk Paste Squad List (WhatsApp / Excel)</span>
+            <span class="text-[10px] text-slate-400">Paste multiple names</span>
+          </summary>
+          <div class="mt-2 space-y-2">
+            <textarea id="bulkPlayersTextarea" rows="4" placeholder="Paste player names (one per line or comma-separated, e.g.&#10;1. Liam O'Connor&#10;2. Noah Byrne&#10;3. Oliver Doyle)" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-xs text-white"></textarea>
+            <button onclick="handleBulkAddPlayersUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-1.5 rounded font-bold text-xs shadow">
+              📥 Import All Pasted Players to Current Team
+            </button>
+          </div>
+        </details>
+      </div>
+
+      <!-- Shared Age-Group Pool Manager -->
+      <details class="bg-slate-800/90 rounded-lg p-3 border border-slate-700 mb-3 text-xs">
+        <summary class="font-bold text-sky-300 cursor-pointer flex justify-between items-center">
+          <span>🔗 Manage Shared Age-Group Player Pool</span>
+          <span class="text-[10px] text-slate-400">Borrow / Share Players</span>
+        </summary>
+        <p class="text-[11px] text-slate-400 mt-1.5 mb-2">Toggle players from sibling teams in the same age group so they appear on this team's bench & pitch dropdowns:</p>
+        <div id="sharedRosterPoolList" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
+      </details>
+
+      <!-- Filter Tabs -->
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold text-xs text-slate-300">Game Time & Position Breakdown (50/50 Split)</h3>
+        <select id="statsScope" onchange="renderStats()" class="bg-slate-800 text-xs px-2 py-1 rounded border border-slate-600">
+          <option value="match">Selected Match Date</option>
+          <option value="season">All Season (Team Matches)</option>
+        </select>
+      </div>
+
+      <div class="overflow-x-auto bg-slate-800 rounded-lg border border-slate-700 mb-10">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-900/60 text-slate-400 border-b border-slate-700">
+            <tr>
+              <th class="p-2.5">Player</th>
+              <th class="p-2 text-center">Total</th>
+              <th class="p-2 text-center">GK</th>
+              <th class="p-2 text-center">DEF</th>
+              <th class="p-2 text-center">MID</th>
+              <th class="p-2 text-center">ATT</th>
+              <th class="p-2"></th>
+            </tr>
+          </thead>
+          <tbody id="statsBody" class="divide-y divide-slate-700/60"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MID-QUARTER SWAP MODAL -->
+  <div id="swapModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-4 text-white">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-amber-400 text-sm">🔄 Mid-Quarter Substitution / Swap</h3>
+        <button onclick="closeSwapModal()" class="text-slate-400 font-bold">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">Swap a player currently on the pitch with another player. Minutes for this quarter will be split 50/50 between them.</p>
+      
+      <div class="space-y-3 mb-4 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Player A (Leaving Position / Swapping):</label>
+          <select id="swapPlayerA" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white"></select>
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Player B (Entering / Swapping With):</label>
+          <select id="swapPlayerB" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white"></select>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button onclick="closeSwapModal()" class="flex-1 bg-slate-700 py-2 rounded font-semibold text-xs">Cancel</button>
+        <button onclick="executeSwap()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2 rounded font-bold text-xs">Confirm Swap</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COACH AUTHENTICATION MODAL (Firebase Auth + Local Sandbox Option) -->
+  <div id="authModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">Straffan AFC</span>
+          <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In (Straffan AFC)</h3>
+        </div>
+        <button onclick="hideAuthModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="bg-slate-900 p-1 rounded-lg flex gap-1 mb-3 border border-slate-700">
+        <button id="authTabLogin" onclick="toggleAuthMode('login')" class="flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white">Sign In</button>
+        <button id="authTabSignup" onclick="toggleAuthMode('signup')" class="flex-1 py-1.5 rounded font-bold text-xs text-slate-400">Register Coach</button>
+      </div>
+
+      <div id="authErrorText" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded mb-3"></div>
+
+      <form onsubmit="handleEmailAuthSubmit(event)" class="space-y-2.5 text-xs mb-3">
+        <div id="authNameWrapper" class="hidden">
+          <label class="block text-slate-400 mb-1">Coach Name:</label>
+          <input type="text" id="authNameInput" placeholder="e.g. Alex Coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Email Address:</label>
+          <input type="email" id="authEmailInput" placeholder="coach@straffanafc.ie" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Password:</label>
+          <input type="password" id="authPasswordInput" placeholder="••••••••" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+        </div>
+        <button type="submit" id="authSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
+          Sign In
+        </button>
+      </form>
+
+      <button onclick="handleGoogleSignIn()" class="w-full bg-white text-slate-900 hover:bg-slate-100 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mb-3">
+        <span>G</span> Continue with Google
+      </button>
+
+      <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
+        <button onclick="useLocalSandboxCoach(&quot;Neil D'Rosario&quot;)" class="text-emerald-400 underline font-semibold">
+          Continue in Local Club Mode
+        </button>
+        <button onclick="handleLogout()" class="text-rose-400 underline">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Printable Card for Image Export -->
+  <div id="exportContainer" class="fixed -left-[9999px] top-0 w-[600px] bg-slate-900 p-6 text-white font-sans">
+    <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-emerald-400" id="exportTitleText">Straffan AFC Team Sheet</h1>
+        <p class="text-slate-400 text-sm" id="exportDateText"></p>
+      </div>
+      <div class="text-right text-xs text-slate-400" id="exportFormationText">Formation: 7v7</div>
+    </div>
+    <div id="exportGrid" class="grid grid-cols-2 gap-4"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

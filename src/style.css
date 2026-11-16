@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.pitch-bg {
+  background: repeating-linear-gradient(
+    0deg,
+    #15803d,
+    #15803d 40px,
+    #166534 40px,
+    #166534 80px
+  );
+}
+
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align-last: center;
+}
