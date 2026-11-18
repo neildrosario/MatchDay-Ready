@@ -20,6 +20,12 @@ import {
   saveMatchMetadata,
   saveQuarterLineup
 } from './db.js';
+import { canEditTeam } from './permissions.js';
+
+function canEditCurrentTeam() {
+  if (appState.mode === 'local' && !appState.userProfile) return true;
+  return canEditTeam(appState.userProfile, getSelectedTeam(), appState.allClubTeams);
+}
 
 const ROLE_BADGE_TEXT = {
   GK: '🧤GK',
@@ -182,6 +188,29 @@ export function renderHeaderAndMatchBar() {
     oppInput.value = match.opposition || '';
   }
 
+  // Enforce Read-Only Viewer controls on Match Header & Pitch Toolbars (Milestone 13)
+  const editable = canEditCurrentTeam();
+  [
+    'periodCountSelect',
+    'qtrMins',
+    'formationSelect',
+    'oppositionInput',
+    'tacticalShapeSelect',
+    'applyShapeAllBtn'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.disabled = !editable;
+      el.classList.toggle('opacity-60', !editable);
+      el.classList.toggle('cursor-not-allowed', !editable);
+    }
+  });
+
+  ['pitchActionToolbar', 'copyPrevQtrBtn', 'resetSwapsBtn', 'addEventInlineBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('hidden', !editable);
+  });
+
   updateMatchHistoryDropdown();
 }
 
@@ -219,11 +248,13 @@ export function onDateInputChange(dateStr) {
 }
 
 export async function onConfigQtrMinsChange(val) {
+  if (!canEditCurrentTeam()) return;
   const qtrMins = parseFloat(val) || 12;
   await saveMatchMetadata({ qtrMins });
 }
 
 export async function onPeriodCountChange(val) {
+  if (!canEditCurrentTeam()) return;
   const periodCount = Number(val) || 4;
   if (appState.currentQuarter > periodCount) {
     appState.currentQuarter = 1;
@@ -233,6 +264,7 @@ export async function onPeriodCountChange(val) {
 }
 
 export async function onFormationChange(formation) {
+  if (!canEditCurrentTeam()) return;
   const defaultShape = getDefaultShapeForFormat(formation);
   await saveMatchMetadata({ formation, tacticalShape: defaultShape });
 
@@ -252,6 +284,7 @@ export async function onFormationChange(formation) {
 }
 
 export async function onTacticalShapeChange(newShape) {
+  if (!canEditCurrentTeam()) return;
   const match = getCurrentMatchDoc();
   const q = appState.currentQuarter;
   const qDoc = getQuarterLineupDoc(q);
@@ -265,6 +298,7 @@ export async function onTacticalShapeChange(newShape) {
 }
 
 export async function applyShapeToAllQuarters() {
+  if (!canEditCurrentTeam()) return;
   const match = getCurrentMatchDoc();
   const periods = getMatchPeriods(match);
   const currentQDoc = getQuarterLineupDoc(appState.currentQuarter);
@@ -286,10 +320,12 @@ export async function applyShapeToAllQuarters() {
 }
 
 export async function onOppositionInputChange(opposition) {
+  if (!canEditCurrentTeam()) return;
   await saveMatchMetadata({ opposition: opposition.trim() });
 }
 
 export async function assignPlayer(posId, playerName) {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   const qDoc = getQuarterLineupDoc(q);
   const lineup = { ...(qDoc.lineup || {}) };
@@ -307,6 +343,7 @@ export async function assignPlayer(posId, playerName) {
 }
 
 export async function toggleUnavailable(playerName) {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   const qDoc = getQuarterLineupDoc(q);
   const unavail = [...(qDoc.unavailablePlayers || [])];
@@ -414,13 +451,14 @@ export function renderPitch() {
           options.push(`<option value="${pName.replace(/"/g, '&quot;')}" ${selected}>${label}</option>`);
         });
 
+        const editable = canEditCurrentTeam();
         html += `
           <div class="flex-1 min-w-0 text-center">
             <span class="text-[9px] font-bold px-1 py-0.5 rounded-t ${pos.color} text-white block truncate">${pos.label}</span>
-            <select data-pos-id="${pos.id}"
+            <select data-pos-id="${pos.id}" ${editable ? '' : 'disabled'}
               class="pitch-slot-select w-full bg-slate-900/95 text-white font-semibold ${
                 isDenseRow ? 'text-[10px] py-1' : 'text-xs py-1.5'
-              } px-0.5 rounded-b border border-white/30 shadow truncate">
+              } px-0.5 rounded-b border border-white/30 shadow truncate ${editable ? '' : 'opacity-80 cursor-not-allowed'}">
               ${options.join('')}
             </select>
           </div>
@@ -463,14 +501,15 @@ export function renderPitch() {
   // 4. Render Unavailable / Resting Checkboxes
   const unavailContainer = document.getElementById('unavailableCheckboxes');
   const unavailBadge = document.getElementById('unavailableCountBadge');
+  const editable = canEditCurrentTeam();
   if (unavailBadge) unavailBadge.innerText = `${unavailSet.size} off`;
   if (unavailContainer) {
     unavailContainer.innerHTML = playerNames
       .map(p => {
         const isChecked = unavailSet.has(p) ? 'checked' : '';
         return `
-          <label class="flex items-center gap-2 text-xs bg-slate-900/60 p-1.5 rounded border border-slate-700 cursor-pointer">
-            <input type="checkbox" data-unavail-player="${p.replace(/"/g, '&quot;')}" ${isChecked} class="unavail-checkbox rounded bg-slate-800 border-slate-600 text-emerald-600 focus:ring-0">
+          <label class="flex items-center gap-2 text-xs bg-slate-900/60 p-1.5 rounded border border-slate-700 ${editable ? 'cursor-pointer' : 'opacity-70 cursor-not-allowed'}">
+            <input type="checkbox" data-unavail-player="${p.replace(/"/g, '&quot;')}" ${isChecked} ${editable ? '' : 'disabled'} class="unavail-checkbox rounded bg-slate-800 border-slate-600 text-emerald-600 focus:ring-0">
             <span class="${isChecked ? 'line-through text-slate-500' : 'text-slate-300'}">${p}</span>
           </label>
         `;
@@ -550,7 +589,11 @@ export function renderPitch() {
                 <span class="font-bold text-emerald-400">${pLabel}${minText}:</span>
                 <span>${icon} <strong>${ev.player || typeLabel}</strong> (${typeLabel})${assistText}${noteText}</span>
               </div>
-              <button data-del-ev-period="${ev.periodNum}" data-del-ev-id="${ev.id}" class="del-match-ev-btn text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>
+              ${
+                editable
+                  ? `<button data-del-ev-period="${ev.periodNum}" data-del-ev-id="${ev.id}" class="del-match-ev-btn text-rose-400 hover:text-rose-300 font-bold px-1">✕</button>`
+                  : ''
+              }
             </div>
           `;
         })
@@ -572,6 +615,7 @@ export function renderPitch() {
 }
 
 export function openSwapModal() {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   const qObj = getQuarterLineupDoc(q);
   const qData = qObj.lineup || {};
@@ -620,6 +664,7 @@ export function closeSwapModal() {
 }
 
 export async function executeSwap() {
+  if (!canEditCurrentTeam()) return;
   const posAId = document.getElementById('swapPlayerA').value;
   const targetB = document.getElementById('swapPlayerB').value;
   if (!posAId || !targetB) return alert('Please select both players for the swap.');
@@ -649,12 +694,14 @@ export async function executeSwap() {
 }
 
 export async function clearSwaps() {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   await saveQuarterLineup(q, { swaps: [] });
 }
 
 // --- MILESTONE 12: LIVE SIDELINE MATCH EVENTS (Goals, Assists, Saves, Effort Stars) ---
 export function openEventModal() {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   const qObj = getQuarterLineupDoc(q);
   const qData = qObj.lineup || {};
@@ -711,6 +758,7 @@ export function onEventTypeSelectChange(typeVal) {
 }
 
 export async function executeLogEvent() {
+  if (!canEditCurrentTeam()) return;
   const type = document.getElementById('eventTypeSelect')?.value || 'GOAL';
   const player = document.getElementById('eventPlayerSelect')?.value || '';
   const assist = type === 'GOAL' ? document.getElementById('eventAssistSelect')?.value || '' : '';
@@ -745,12 +793,14 @@ export async function executeLogEvent() {
 }
 
 export async function removeMatchEvent(periodNum, eventId) {
+  if (!canEditCurrentTeam()) return;
   const qObj = getQuarterLineupDoc(periodNum);
   const updated = (qObj.events || []).filter(e => e.id !== eventId);
   await saveQuarterLineup(periodNum, { events: updated });
 }
 
 export async function autoGenerateMatch() {
+  if (!canEditCurrentTeam()) return;
   const team = getSelectedTeam();
   const match = getCurrentMatchDoc();
   const periods = getMatchPeriods(match);
@@ -927,6 +977,7 @@ export async function autoGenerateMatch() {
 }
 
 export async function copyPreviousQuarter() {
+  if (!canEditCurrentTeam()) return;
   const q = appState.currentQuarter;
   if (q === 1) return alert('Select Period 2, 3, or 4 to copy from the previous period.');
   const prevQ = getQuarterLineupDoc(q - 1);

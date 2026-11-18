@@ -17,10 +17,24 @@ import {
   ensureUserAndClubSeeded,
   startFirestoreSubscriptions,
   clearFirestoreSubscriptions,
-  hydrateAppStateFromLocalStore
+  hydrateAppStateFromLocalStore,
+  submitJoinCodeRequest,
+  cancelPendingJoinRequest,
+  normalizeJoinCode,
+  notifyAppState
 } from './db.js';
+import { getRoleMeta, isViewer } from './permissions.js';
 
 let authMode = 'login'; // 'login' | 'signup'
+
+function getJoinCodeFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return normalizeJoinCode(params.get('code') || params.get('join') || '');
+  } catch (_) {
+    return '';
+  }
+}
 
 export function initAuth() {
   const { auth, configured } = getFirebaseServices();
@@ -34,6 +48,7 @@ export function initAuth() {
     };
     hydrateAppStateFromLocalStore();
     renderAuthStatusBanner();
+    renderAccessGate();
     return;
   }
 
@@ -42,18 +57,26 @@ export function initAuth() {
       appState.currentUser = user;
       hideAuthModal();
       try {
-        await ensureUserAndClubSeeded(user);
-        startFirestoreSubscriptions(user);
+        const res = await ensureUserAndClubSeeded(user);
+        if (res?.accessStatus === 'ready') {
+          startFirestoreSubscriptions(user);
+        }
       } catch (e) {
         console.error('Error initializing club data in Firestore:', e);
-        hydrateAppStateFromLocalStore();
+        appState.accessStatus = 'needs_onboarding';
+        appState.syncState = 'error';
+        notifyAppState();
       }
     } else {
       clearFirestoreSubscriptions();
       appState.currentUser = null;
+      appState.userProfile = null;
+      appState.accessStatus = 'ready';
+      appState.pendingJoinRequest = null;
       showAuthModal();
     }
     renderAuthStatusBanner();
+    renderAccessGate();
   });
 }
 
@@ -76,13 +99,13 @@ export function toggleAuthMode(mode) {
   const tabSignup = document.getElementById('authTabSignup');
 
   if (mode === 'signup') {
-    if (titleEl) titleEl.innerText = 'Register Coach Account (Straffan AFC)';
+    if (titleEl) titleEl.innerText = 'Register Coach Account';
     if (nameWrap) nameWrap.classList.remove('hidden');
     if (submitBtn) submitBtn.innerText = 'Create Coach Account';
     if (tabSignup) tabSignup.className = 'flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white';
     if (tabLogin) tabLogin.className = 'flex-1 py-1.5 rounded font-bold text-xs text-slate-400';
   } else {
-    if (titleEl) titleEl.innerText = 'Coach Sign In (Straffan AFC)';
+    if (titleEl) titleEl.innerText = 'Coach Sign In';
     if (nameWrap) nameWrap.classList.add('hidden');
     if (submitBtn) submitBtn.innerText = 'Sign In';
     if (tabLogin) tabLogin.className = 'flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white';
@@ -156,6 +179,7 @@ export async function handleGoogleSignIn() {
 }
 
 export function useLocalSandboxCoach(name = "Neil D'Rosario") {
+  clearFirestoreSubscriptions();
   appState.currentUser = {
     uid: 'local_coach_1',
     email: 'neil@straffanafc.ie',
@@ -164,6 +188,7 @@ export function useLocalSandboxCoach(name = "Neil D'Rosario") {
   hideAuthModal();
   hydrateAppStateFromLocalStore();
   renderAuthStatusBanner();
+  renderAccessGate();
 }
 
 export async function handleLogout() {
@@ -196,6 +221,167 @@ export function handleDisconnectFirebaseUI() {
   window.location.reload();
 }
 
+// --- MILESTONE 13: ACCESS GATE (JOIN CODE & APPROVAL QUEUE) ---
+
+export function renderAccessGate() {
+  const gateModal = document.getElementById('accessGateModal');
+  const emailBadge = document.getElementById('accessGateEmail');
+  const formPanel = document.getElementById('accessGateJoinFormPanel');
+  const pendingPanel = document.getElementById('accessGatePendingPanel');
+  const pendingClubName = document.getElementById('accessGatePendingClub');
+  const pendingCodeText = document.getElementById('accessGatePendingCode');
+  const rejectedBanner = document.getElementById('accessGateRejectedBanner');
+  const suspendedPanel = document.getElementById('accessGateSuspendedPanel');
+  const codeInput = document.getElementById('accessGateJoinCodeInput');
+  const nameInput = document.getElementById('accessGateNameInput');
+
+  const status = appState.accessStatus;
+  const shouldShowGate =
+    appState.mode === 'firebase' &&
+    Boolean(appState.currentUser) &&
+    ['needs_onboarding', 'pending_approval', 'rejected', 'suspended'].includes(status);
+
+  if (gateModal) {
+    gateModal.classList.toggle('hidden', !shouldShowGate);
+  }
+
+  if (shouldShowGate) {
+    if (emailBadge) {
+      emailBadge.innerText = appState.currentUser?.email || appState.currentUser?.displayName || 'Signed in';
+    }
+    if (nameInput && !nameInput.value && appState.currentUser?.displayName) {
+      nameInput.value = appState.currentUser.displayName;
+    }
+    const urlCode = getJoinCodeFromUrl();
+    if (codeInput && !codeInput.value && urlCode) {
+      codeInput.value = urlCode;
+    }
+
+    const isPending = status === 'pending_approval';
+    const isRejected = status === 'rejected';
+    const isSuspended = status === 'suspended';
+
+    if (formPanel) formPanel.classList.toggle('hidden', isPending || isSuspended);
+    if (pendingPanel) pendingPanel.classList.toggle('hidden', !isPending);
+    if (rejectedBanner) rejectedBanner.classList.toggle('hidden', !isRejected);
+    if (suspendedPanel) suspendedPanel.classList.toggle('hidden', !isSuspended);
+
+    if (isPending && appState.pendingJoinRequest) {
+      if (pendingClubName) pendingClubName.innerText = appState.pendingJoinRequest.clubName || 'your club';
+      if (pendingCodeText) pendingCodeText.innerText = appState.pendingJoinRequest.joinCode || '';
+    }
+  }
+
+  // Invited welcome banner
+  const inviteBanner = document.getElementById('claimedInviteBanner');
+  const inviteText = document.getElementById('claimedInviteText');
+  if (inviteBanner && inviteText) {
+    const hasNotice = Boolean(appState.claimedInviteNotice);
+    inviteBanner.classList.toggle('hidden', !hasNotice);
+    if (hasNotice) inviteText.innerText = appState.claimedInviteNotice;
+  }
+
+  // Read-only viewer banner
+  const viewerBanner = document.getElementById('viewerReadOnlyBanner');
+  if (viewerBanner) {
+    const showViewer =
+      appState.accessStatus === 'ready' && isViewer(appState.userProfile);
+    viewerBanner.classList.toggle('hidden', !showViewer);
+  }
+
+  // No teams assigned warning (for active coach/lead/viewer with 0 assigned teams)
+  const noTeamsBanner = document.getElementById('noTeamsAssignedBanner');
+  if (noTeamsBanner) {
+    const showNoTeams =
+      appState.accessStatus === 'ready' &&
+      appState.syncState === 'synced' &&
+      Boolean(appState.userProfile) &&
+      appState.userProfile.role !== 'admin' &&
+      appState.teams.length === 0;
+    noTeamsBanner.classList.toggle('hidden', !showNoTeams);
+  }
+}
+
+export async function handleSubmitJoinCodeUI(event) {
+  if (event) event.preventDefault();
+  const codeInput = document.getElementById('accessGateJoinCodeInput');
+  const nameInput = document.getElementById('accessGateNameInput');
+  const noteInput = document.getElementById('accessGateNoteInput');
+  const errEl = document.getElementById('accessGateError');
+  const submitBtn = document.getElementById('accessGateSubmitBtn');
+
+  if (errEl) errEl.classList.add('hidden');
+  const joinCode = normalizeJoinCode(codeInput?.value || '');
+  if (!joinCode) {
+    if (errEl) {
+      errEl.innerText = 'Please enter a valid Club Join Code (e.g. STRAFFAN-2026).';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Checking Join Code...';
+  }
+  try {
+    await submitJoinCodeRequest({
+      joinCode,
+      displayName: nameInput?.value.trim() || '',
+      note: noteInput?.value.trim() || ''
+    });
+    renderAccessGate();
+  } catch (e) {
+    if (errEl) {
+      errEl.innerText = e.message || 'Could not submit join request.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = '🔑 Request Club Access';
+    }
+  }
+}
+
+export async function handleCancelJoinRequestUI() {
+  const reqId = appState.pendingJoinRequest?.requestId;
+  if (!reqId) return;
+  if (!confirm('Cancel your pending join request?')) return;
+  try {
+    await cancelPendingJoinRequest(reqId);
+    renderAccessGate();
+  } catch (e) {
+    alert(e.message || 'Could not cancel request.');
+  }
+}
+
+export async function handleRecheckAccessUI() {
+  if (!appState.currentUser) return;
+  const errEl = document.getElementById('accessGateError');
+  if (errEl) errEl.classList.add('hidden');
+  try {
+    const res = await ensureUserAndClubSeeded(appState.currentUser);
+    if (res?.accessStatus === 'ready') {
+      startFirestoreSubscriptions(appState.currentUser);
+    } else if (errEl && res?.accessStatus === 'needs_onboarding') {
+      errEl.innerText = 'No pending email invite found yet for your email. Enter a Club Join Code below or ask your Club Admin to invite your email.';
+      errEl.classList.remove('hidden');
+    }
+    renderAccessGate();
+  } catch (e) {
+    if (errEl) {
+      errEl.innerText = e.message || 'Could not refresh access status.';
+      errEl.classList.remove('hidden');
+    }
+  }
+}
+
+export function dismissClaimedInviteNotice() {
+  appState.claimedInviteNotice = null;
+  renderAccessGate();
+}
+
 export function renderAuthStatusBanner() {
   const syncBadge = document.getElementById('syncStatus');
   const configBadge = document.getElementById('configBadge');
@@ -211,6 +397,10 @@ export function renderAuthStatusBanner() {
       syncBadge.className =
         'text-[10px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded border border-sky-500/30';
       syncBadge.innerText = 'Syncing...';
+    } else if (appState.mode === 'firebase' && appState.syncState === 'error') {
+      syncBadge.className =
+        'text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded border border-rose-500/30';
+      syncBadge.innerText = 'Sync Error';
     } else {
       syncBadge.className =
         'text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30';
@@ -231,7 +421,7 @@ export function renderAuthStatusBanner() {
       appState.currentUser?.displayName ||
       appState.currentUser?.email ||
       'Coach';
-    const role = appState.userProfile?.role || 'coach';
-    coachNameEl.innerText = `👤 ${name} (${role.toUpperCase()})`;
+    const meta = getRoleMeta(appState.userProfile?.role || 'viewer');
+    coachNameEl.innerText = `${meta.icon} ${name} (${meta.short})`;
   }
 }

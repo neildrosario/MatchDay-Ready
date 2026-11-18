@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   query,
@@ -13,8 +14,17 @@ import {
 import {
   getFirebaseServices,
   DEFAULT_CLUB_ID,
+  DEFAULT_CLUB_NAME,
   DEFAULT_CLUB_FULL_NAME
 } from './firebase.js';
+import {
+  getAccessibleTeamsForProfile,
+  isClubAdmin,
+  isProfileActive,
+  canModifyUserRole,
+  canRemoveUser,
+  normalizeRole
+} from './permissions.js';
 
 export const FORMAT_SIZES = {
   '5v5': 5,
@@ -356,7 +366,10 @@ function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@st
       [DEFAULT_CLUB_ID]: {
         clubId: DEFAULT_CLUB_ID,
         name: DEFAULT_CLUB_FULL_NAME,
-        shortName: 'Straffan AFC',
+        shortName: DEFAULT_CLUB_NAME,
+        joinCode: 'STRAFFAN-2026',
+        joinCodeEnabled: true,
+        joinDefaultRole: 'coach',
         createdAt: new Date().toISOString()
       }
     },
@@ -386,10 +399,25 @@ function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@st
         email: adminEmail,
         displayName: adminName,
         role: 'admin',
+        status: 'active',
         clubId: DEFAULT_CLUB_ID,
-        assignedTeamIds: ['u10_white', 'u10_green']
+        assignedTeamIds: ['u10_white', 'u10_green'],
+        assignedAgeGroups: ['U10']
       }
     },
+    invites: {},
+    joinCodes: {
+      'STRAFFAN-2026': {
+        code: 'STRAFFAN-2026',
+        clubId: DEFAULT_CLUB_ID,
+        clubName: DEFAULT_CLUB_NAME,
+        active: true,
+        defaultRole: 'coach',
+        updatedAt: new Date().toISOString(),
+        updatedBy: adminUid
+      }
+    },
+    joinRequests: {},
     players: playersMap,
     matches: {},
     lineups: {}
@@ -400,12 +428,17 @@ function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@st
 export const appState = {
   mode: 'local', // 'firebase' | 'local'
   syncState: 'local', // 'synced' | 'syncing' | 'local' | 'error'
+  accessStatus: 'ready', // 'ready' | 'loading' | 'needs_onboarding' | 'pending_approval' | 'rejected' | 'suspended'
+  pendingJoinRequest: null, // Active/rejected joinRequest for unattached user
+  claimedInviteNotice: null, // Banner notice shown after auto-claiming an email invite
   currentUser: null, // Firebase auth user or local user profile
   userProfile: null, // Document from `users` collection
   club: null,
   teams: [], // Teams accessible to this user
   allClubTeams: [], // All teams in club (for shared player badges & admin)
-  allClubUsers: [], // All coaches/admins in club (for Admin Coach Management 5B)
+  allClubUsers: [], // All coaches/leads/viewers/admins in club
+  allClubInvites: [], // Pending/accepted email invites for club (Admin only)
+  allClubJoinRequests: [], // Pending/reviewed join-code requests (Admin only)
   selectedTeamId: localStorage.getItem('matchday_selected_team_v3') || 'u10_white',
   selectedDate: new Date().toISOString().split('T')[0],
   currentQuarter: 1,
@@ -418,6 +451,30 @@ export const appState = {
 
 const listeners = new Set();
 let activeUnsubscribes = [];
+let adminUnsubscribes = [];
+let accessGateUnsubscribes = [];
+const backfilledClubIds = new Set();
+
+export function getActiveClubId() {
+  return appState.userProfile?.clubId || appState.club?.clubId || DEFAULT_CLUB_ID;
+}
+
+export function normalizeJoinCode(raw = '') {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '');
+}
+
+export function generateClubJoinCode(clubShortName = 'CLUB') {
+  const prefix =
+    String(clubShortName || 'CLUB')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 8) || 'CLUB';
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}-${suffix}`;
+}
 
 export function subscribeAppState(fn) {
   listeners.add(fn);
@@ -459,6 +516,9 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   const store = storeInput || loadLocalStore();
   appState.mode = 'local';
   appState.syncState = 'local';
+  appState.accessStatus = 'ready';
+  appState.pendingJoinRequest = null;
+
   const uid = appState.currentUser?.uid || 'local_coach_1';
   if (!store.users[uid]) {
     store.users[uid] = {
@@ -466,22 +526,26 @@ export function hydrateAppStateFromLocalStore(storeInput) {
       email: appState.currentUser?.email || 'neil@straffanafc.ie',
       displayName: appState.currentUser?.displayName || "Neil D'Rosario",
       role: 'admin',
+      status: 'active',
       clubId: DEFAULT_CLUB_ID,
-      assignedTeamIds: ['u10_white', 'u10_green']
+      assignedTeamIds: ['u10_white', 'u10_green'],
+      assignedAgeGroups: ['U10']
     };
   }
   appState.userProfile = store.users[uid];
   appState.club = store.clubs[DEFAULT_CLUB_ID] || {
     clubId: DEFAULT_CLUB_ID,
-    name: DEFAULT_CLUB_FULL_NAME
+    name: DEFAULT_CLUB_FULL_NAME,
+    shortName: DEFAULT_CLUB_NAME,
+    joinCode: 'STRAFFAN-2026',
+    joinCodeEnabled: true
   };
-  appState.allClubTeams = Object.values(store.teams);
+  appState.allClubTeams = Object.values(store.teams || {});
   appState.allClubUsers = Object.values(store.users || {});
-  appState.teams = appState.allClubTeams.filter(
-    t =>
-      appState.userProfile.role === 'admin' ||
-      (appState.userProfile.assignedTeamIds || []).includes(t.teamId)
-  );
+  appState.allClubInvites = Object.values(store.invites || {});
+  appState.allClubJoinRequests = Object.values(store.joinRequests || {});
+  appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
+
   if (appState.teams.length > 0 && !appState.teams.some(t => t.teamId === appState.selectedTeamId)) {
     appState.selectedTeamId = appState.teams[0].teamId;
   }
@@ -510,96 +574,23 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   notifyAppState();
 }
 
-// --- CLOUD FIRESTORE SEEDING & SUBSCRIPTIONS ---
-export async function ensureUserAndClubSeeded(firebaseUser) {
-  const { db, configured } = getFirebaseServices();
-  if (!configured || !db || !firebaseUser) return;
-
-  appState.syncState = 'syncing';
-  notifyAppState();
-
-  const clubRef = doc(db, 'clubs', DEFAULT_CLUB_ID);
-  const clubSnap = await getDoc(clubRef);
-
-  const userRef = doc(db, 'users', firebaseUser.uid);
-  const u10WhiteRef = doc(db, 'teams', 'u10_white');
-  const u10WhiteSnap = await getDoc(u10WhiteRef);
-
-  if (!clubSnap.exists() || !u10WhiteSnap.exists()) {
-    // Seed or migrate club initialization for Straffan AFC (U10 White & U10 Green for Neil D'Rosario)
-    const seed = createInitialSeedData(
-      firebaseUser.uid,
-      firebaseUser.email || 'neil@straffanafc.ie',
-      firebaseUser.displayName || "Neil D'Rosario"
-    );
-
-    await setDoc(clubRef, {
-      ...seed.clubs[DEFAULT_CLUB_ID],
-      createdAt: serverTimestamp()
-    }, { merge: true });
-
-    // Remove legacy u12_white / u12_blue if they were auto-seeded earlier
+// --- CLOUD FIRESTORE SEEDING, INVITE CLAIMING & SUBSCRIPTIONS (Milestone 13) ---
+function clearAdminSubscriptions() {
+  adminUnsubscribes.forEach(unsub => {
     try {
-      await deleteDoc(doc(db, 'teams', 'u12_white'));
-      await deleteDoc(doc(db, 'teams', 'u12_blue'));
+      unsub();
     } catch (_) {}
+  });
+  adminUnsubscribes = [];
+}
 
-    for (const team of Object.values(seed.teams)) {
-      await setDoc(doc(db, 'teams', team.teamId), team);
-    }
-
-    for (const player of Object.values(seed.players)) {
-      await setDoc(doc(db, 'players', player.playerId), player);
-    }
-
-    await setDoc(userRef, seed.users[firebaseUser.uid], { merge: true });
-  } else {
-    const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) {
-      // Check if an Admin pre-authorized this coach by email
-      const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
-      let matchedInvite = null;
-      if (cleanEmail) {
-        const usersSnap = await getDocs(
-          query(collection(db, 'users'), where('clubId', '==', DEFAULT_CLUB_ID))
-        );
-        usersSnap.docs.forEach(d => {
-          const data = d.data();
-          if (
-            data.uid !== firebaseUser.uid &&
-            (data.email || '').trim().toLowerCase() === cleanEmail
-          ) {
-            matchedInvite = { docId: d.id, ...data };
-          }
-        });
-      }
-
-      if (matchedInvite) {
-        await setDoc(userRef, {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || matchedInvite.email,
-          displayName: firebaseUser.displayName || matchedInvite.displayName || 'Coach',
-          role: matchedInvite.role || 'coach',
-          clubId: DEFAULT_CLUB_ID,
-          assignedTeamIds: matchedInvite.assignedTeamIds || ['u10_white']
-        });
-        if (matchedInvite.docId.startsWith('invite_')) {
-          try {
-            await deleteDoc(doc(db, 'users', matchedInvite.docId));
-          } catch (_) {}
-        }
-      } else {
-        await setDoc(userRef, {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || 'neil@straffanafc.ie',
-          displayName: firebaseUser.displayName || "Neil D'Rosario",
-          role: 'admin',
-          clubId: DEFAULT_CLUB_ID,
-          assignedTeamIds: ['u10_white', 'u10_green']
-        });
-      }
-    }
-  }
+function clearAccessGateSubscriptions() {
+  accessGateUnsubscribes.forEach(unsub => {
+    try {
+      unsub();
+    } catch (_) {}
+  });
+  accessGateUnsubscribes = [];
 }
 
 export function clearFirestoreSubscriptions() {
@@ -609,6 +600,354 @@ export function clearFirestoreSubscriptions() {
     } catch (_) {}
   });
   activeUnsubscribes = [];
+  clearAdminSubscriptions();
+  clearAccessGateSubscriptions();
+}
+
+function resetClubRuntimeData() {
+  appState.club = null;
+  appState.teams = [];
+  appState.allClubTeams = [];
+  appState.allClubUsers = [];
+  appState.allClubInvites = [];
+  appState.allClubJoinRequests = [];
+  appState.players = [];
+  appState.allMatches = {};
+  appState.matchesByTeam = {};
+  appState.lineupsByMatch = {};
+  appState.sameDateLineupsAllTeams = [];
+}
+
+/**
+ * Watches `users/{uid}` and `joinRequests` while an uninvited user is on the Access Gate,
+ * so the moment a Club Admin approves them (or sends an invite), the app unlocks live!
+ */
+function startAccessGateWatcher(firebaseUser) {
+  clearAccessGateSubscriptions();
+  const { db } = getFirebaseServices();
+  if (!db || !firebaseUser) return;
+
+  accessGateUnsubscribes.push(
+    onSnapshot(doc(db, 'users', firebaseUser.uid), snap => {
+      if (snap.exists()) {
+        const profile = snap.data();
+        appState.userProfile = profile;
+        if (isProfileActive(profile)) {
+          clearAccessGateSubscriptions();
+          appState.accessStatus = 'ready';
+          appState.pendingJoinRequest = null;
+          startFirestoreSubscriptions(firebaseUser);
+        } else {
+          appState.accessStatus = 'suspended';
+          notifyAppState();
+        }
+      }
+    })
+  );
+
+  accessGateUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'joinRequests'), where('uid', '==', firebaseUser.uid)),
+      snap => {
+        const reqs = snap.docs
+          .map(d => ({ requestId: d.id, ...d.data() }))
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        const pending = reqs.find(r => r.status === 'pending');
+        const rejected = reqs.find(r => r.status === 'rejected');
+        if (pending) {
+          appState.pendingJoinRequest = pending;
+          if (appState.accessStatus !== 'ready') {
+            appState.accessStatus = 'pending_approval';
+          }
+        } else if (rejected && appState.accessStatus !== 'ready') {
+          appState.pendingJoinRequest = rejected;
+          appState.accessStatus = 'rejected';
+        } else if (appState.accessStatus === 'pending_approval') {
+          appState.pendingJoinRequest = null;
+          appState.accessStatus = 'needs_onboarding';
+        }
+        notifyAppState();
+      },
+      err => {
+        console.warn('Join request watcher error:', err);
+      }
+    )
+  );
+}
+
+/**
+ * Resolves a signed-in user's club membership:
+ * 1. Existing `users/{uid}` profile -> Active or Suspended
+ * 2. Pending email match in `invites` -> Auto-claim with exact Admin-assigned role & teams
+ * 3. Brand-new empty Firestore (no default club yet) -> Bootstrap founding Admin
+ * 4. Otherwise -> Route to Access Gate (Enter Join Code / Wait for Admin Approval) — NEVER auto-admin!
+ */
+export async function ensureUserAndClubSeeded(firebaseUser) {
+  const { db, configured } = getFirebaseServices();
+  if (!configured || !db || !firebaseUser) return { accessStatus: 'needs_onboarding' };
+
+  appState.mode = 'firebase';
+  appState.syncState = 'syncing';
+  appState.accessStatus = 'loading';
+  appState.claimedInviteNotice = null;
+  notifyAppState();
+
+  const userRef = doc(db, 'users', firebaseUser.uid);
+
+  // 1. Check existing user profile first
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const profile = userSnap.data();
+    appState.userProfile = profile;
+    if (!isProfileActive(profile)) {
+      resetClubRuntimeData();
+      appState.accessStatus = 'suspended';
+      appState.syncState = 'synced';
+      notifyAppState();
+      startAccessGateWatcher(firebaseUser);
+      return { accessStatus: 'suspended', userProfile: profile };
+    }
+    appState.accessStatus = 'ready';
+    notifyAppState();
+    return { accessStatus: 'ready', userProfile: profile };
+  }
+
+  // 2. Check dedicated `invites` collection for a pending email invite
+  const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+  if (cleanEmail) {
+    try {
+      const inviteSnap = await getDocs(
+        query(collection(db, 'invites'), where('email', '==', cleanEmail))
+      );
+      const pendingInvites = inviteSnap.docs
+        .map(d => ({ inviteId: d.id, ...d.data() }))
+        .filter(inv => inv.status === 'pending');
+
+      if (pendingInvites.length > 0) {
+        const inv = pendingInvites[0];
+        const newProfile = {
+          uid: firebaseUser.uid,
+          email: cleanEmail,
+          displayName: firebaseUser.displayName || inv.displayName || cleanEmail.split('@')[0],
+          role: normalizeRole(inv.role || 'coach'),
+          status: 'active',
+          clubId: inv.clubId,
+          assignedTeamIds: Array.isArray(inv.assignedTeamIds) ? inv.assignedTeamIds : [],
+          assignedAgeGroups: Array.isArray(inv.assignedAgeGroups) ? inv.assignedAgeGroups : [],
+          claimedInviteId: inv.inviteId,
+          createdAt: new Date().toISOString()
+        };
+
+        await setDoc(userRef, newProfile);
+        try {
+          await updateDoc(doc(db, 'invites', inv.inviteId), {
+            status: 'accepted',
+            claimedBy: firebaseUser.uid,
+            claimedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          console.warn('Could not mark invite as accepted:', err);
+        }
+
+        appState.userProfile = newProfile;
+        appState.accessStatus = 'ready';
+        appState.claimedInviteNotice = `Welcome to ${inv.clubName || 'your club'}! Your invite as ${newProfile.role.toUpperCase()} has been activated.`;
+        notifyAppState();
+        return { accessStatus: 'ready', userProfile: newProfile, claimedInvite: inv };
+      }
+    } catch (err) {
+      console.warn('Invite lookup error:', err);
+    }
+  }
+
+  // 3. Check if default club needs initial first-ever bootstrap (empty Firebase project only)
+  const clubRef = doc(db, 'clubs', DEFAULT_CLUB_ID);
+  let clubExists = true;
+  try {
+    const clubSnap = await getDoc(clubRef);
+    clubExists = clubSnap.exists();
+  } catch (err) {
+    // Permission denied means the club already exists and this uninvited user is not a member
+    clubExists = true;
+  }
+
+  if (!clubExists) {
+    const seed = createInitialSeedData(
+      firebaseUser.uid,
+      firebaseUser.email || 'neil@straffanafc.ie',
+      firebaseUser.displayName || "Neil D'Rosario"
+    );
+
+    // Create founding Admin user first (allowed when club does not exist yet), then club & seed data
+    await setDoc(userRef, seed.users[firebaseUser.uid]);
+    await setDoc(clubRef, {
+      ...seed.clubs[DEFAULT_CLUB_ID],
+      createdAt: serverTimestamp()
+    });
+    const defaultJoinCode = seed.clubs[DEFAULT_CLUB_ID].joinCode;
+    await setDoc(doc(db, 'joinCodes', defaultJoinCode), seed.joinCodes[defaultJoinCode]);
+    for (const team of Object.values(seed.teams)) {
+      await setDoc(doc(db, 'teams', team.teamId), team);
+    }
+    for (const player of Object.values(seed.players)) {
+      await setDoc(doc(db, 'players', player.playerId), player);
+    }
+
+    appState.userProfile = seed.users[firebaseUser.uid];
+    appState.accessStatus = 'ready';
+    notifyAppState();
+    return { accessStatus: 'ready', userProfile: appState.userProfile };
+  }
+
+  // 4. Club exists & user has no profile or invite -> Check pending joinRequests & show Access Gate
+  resetClubRuntimeData();
+  appState.userProfile = null;
+  let accessStatus = 'needs_onboarding';
+  let foundReq = null;
+
+  try {
+    const reqSnap = await getDocs(
+      query(collection(db, 'joinRequests'), where('uid', '==', firebaseUser.uid))
+    );
+    const reqs = reqSnap.docs
+      .map(d => ({ requestId: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const pending = reqs.find(r => r.status === 'pending');
+    const rejected = reqs.find(r => r.status === 'rejected');
+    if (pending) {
+      accessStatus = 'pending_approval';
+      foundReq = pending;
+    } else if (rejected) {
+      accessStatus = 'rejected';
+      foundReq = rejected;
+    }
+  } catch (err) {
+    console.warn('Join request check error:', err);
+  }
+
+  appState.pendingJoinRequest = foundReq;
+  appState.accessStatus = accessStatus;
+  appState.syncState = 'synced';
+  notifyAppState();
+  startAccessGateWatcher(firebaseUser);
+  return { accessStatus, joinRequest: foundReq };
+}
+
+/**
+ * One-time safe migration for existing Straffan AFC deployments:
+ * 1. Stamps `clubId` on any legacy `matches` & `lineups` docs for the user's assigned teams so
+ *    club-scoped queries (`where('clubId', '==', clubId)`) pick them up permanently.
+ * 2. Ensures `clubs/{clubId}` has an active Join Code synced in `joinCodes/{code}` (Admin only).
+ */
+async function backfillLegacyClubDataIfNeeded(clubId) {
+  if (backfilledClubIds.has(clubId)) return;
+  const { db } = getFirebaseServices();
+  if (!db || !appState.userProfile) return;
+  backfilledClubIds.add(clubId);
+
+  try {
+    // 1. Backfill `clubId` onto legacy matches & lineups for user's assigned teams
+    const teamIds = appState.userProfile.assignedTeamIds || [];
+    for (const tId of teamIds) {
+      try {
+        const mSnap = await getDocs(
+          query(collection(db, 'matches'), where('teamId', '==', tId))
+        );
+        for (const d of mSnap.docs) {
+          if (!d.data().clubId) {
+            await setDoc(doc(db, 'matches', d.id), { clubId }, { merge: true });
+          }
+        }
+
+        const lSnap = await getDocs(
+          query(collection(db, 'lineups'), where('teamId', '==', tId))
+        );
+        for (const d of lSnap.docs) {
+          if (!d.data().clubId) {
+            await setDoc(doc(db, 'lineups', d.id), { clubId }, { merge: true });
+          }
+        }
+      } catch (err) {
+        console.warn(`Legacy backfill skipped for team ${tId}:`, err.message);
+      }
+    }
+
+    // 2. If Admin, ensure club has a joinCode & matching `joinCodes/{code}` doc
+    if (isClubAdmin(appState.userProfile)) {
+      const clubSnap = await getDoc(doc(db, 'clubs', clubId));
+      if (clubSnap.exists()) {
+        const clubData = clubSnap.data();
+        const existingCode = normalizeJoinCode(clubData.joinCode || '');
+        if (!existingCode) {
+          const newCode = generateClubJoinCode(clubData.shortName || clubData.name || 'CLUB');
+          await setDoc(
+            doc(db, 'clubs', clubId),
+            {
+              joinCode: newCode,
+              joinCodeEnabled: true,
+              joinDefaultRole: 'coach'
+            },
+            { merge: true }
+          );
+          await setDoc(doc(db, 'joinCodes', newCode), {
+            code: newCode,
+            clubId,
+            clubName: clubData.shortName || clubData.name || 'Club',
+            active: true,
+            defaultRole: 'coach',
+            updatedAt: new Date().toISOString(),
+            updatedBy: appState.userProfile.uid
+          });
+        } else {
+          // Ensure lookup doc exists in `joinCodes`
+          const codeSnap = await getDoc(doc(db, 'joinCodes', existingCode));
+          if (!codeSnap.exists()) {
+            await setDoc(doc(db, 'joinCodes', existingCode), {
+              code: existingCode,
+              clubId,
+              clubName: clubData.shortName || clubData.name || 'Club',
+              active: clubData.joinCodeEnabled !== false,
+              defaultRole: clubData.joinDefaultRole || 'coach',
+              updatedAt: new Date().toISOString(),
+              updatedBy: appState.userProfile.uid
+            });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Legacy club data backfill note:', err);
+  }
+}
+
+function startAdminSubscriptions(db, clubId) {
+  clearAdminSubscriptions();
+
+  adminUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'invites'), where('clubId', '==', clubId)),
+      snap => {
+        appState.allClubInvites = snap.docs
+          .map(d => ({ inviteId: d.id, ...d.data() }))
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        notifyAppState();
+      },
+      err => console.warn('Invites subscription error:', err)
+    )
+  );
+
+  adminUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'joinRequests'), where('clubId', '==', clubId)),
+      snap => {
+        appState.allClubJoinRequests = snap.docs
+          .map(d => ({ requestId: d.id, ...d.data() }))
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        notifyAppState();
+      },
+      err => console.warn('JoinRequests subscription error:', err)
+    )
+  );
 }
 
 export function startFirestoreSubscriptions(firebaseUser) {
@@ -616,11 +955,15 @@ export function startFirestoreSubscriptions(firebaseUser) {
   const { db, configured } = getFirebaseServices();
   if (!configured || !db || !firebaseUser) return;
 
+  const clubId = appState.userProfile?.clubId || DEFAULT_CLUB_ID;
+
   appState.mode = 'firebase';
   appState.syncState = 'syncing';
+  appState.accessStatus = 'ready';
   notifyAppState();
 
-  const clubId = DEFAULT_CLUB_ID;
+  // Trigger safe legacy backfill in background
+  backfillLegacyClubDataIfNeeded(clubId);
 
   // 1. Subscribe to Club document
   activeUnsubscribes.push(
@@ -632,17 +975,52 @@ export function startFirestoreSubscriptions(firebaseUser) {
     })
   );
 
-  // 2. Subscribe to User profile & Club Users (for Admin Coach Management)
+  // 2. Subscribe to own User profile (handles live role/team changes & suspension)
+  let adminSubsActive = isClubAdmin(appState.userProfile);
+  if (adminSubsActive) {
+    startAdminSubscriptions(db, clubId);
+  }
+
   activeUnsubscribes.push(
     onSnapshot(doc(db, 'users', firebaseUser.uid), snap => {
-      if (snap.exists()) {
-        appState.userProfile = snap.data();
-        filterAccessibleTeams();
+      if (!snap.exists()) {
+        clearFirestoreSubscriptions();
+        resetClubRuntimeData();
+        appState.userProfile = null;
+        appState.accessStatus = 'needs_onboarding';
         notifyAppState();
+        startAccessGateWatcher(firebaseUser);
+        return;
       }
+      const profile = snap.data();
+      appState.userProfile = profile;
+
+      if (!isProfileActive(profile)) {
+        clearFirestoreSubscriptions();
+        resetClubRuntimeData();
+        appState.accessStatus = 'suspended';
+        notifyAppState();
+        startAccessGateWatcher(firebaseUser);
+        return;
+      }
+
+      const nowAdmin = isClubAdmin(profile);
+      if (nowAdmin && !adminSubsActive) {
+        adminSubsActive = true;
+        startAdminSubscriptions(db, clubId);
+      } else if (!nowAdmin && adminSubsActive) {
+        adminSubsActive = false;
+        clearAdminSubscriptions();
+        appState.allClubInvites = [];
+        appState.allClubJoinRequests = [];
+      }
+
+      filterAccessibleTeams();
+      notifyAppState();
     })
   );
 
+  // 3. Subscribe to Club Users (club-scoped)
   activeUnsubscribes.push(
     onSnapshot(
       query(collection(db, 'users'), where('clubId', '==', clubId)),
@@ -653,7 +1031,7 @@ export function startFirestoreSubscriptions(firebaseUser) {
     )
   );
 
-  // 3. Subscribe to Club Teams
+  // 4. Subscribe to Club Teams (club-scoped)
   activeUnsubscribes.push(
     onSnapshot(
       query(collection(db, 'teams'), where('clubId', '==', clubId)),
@@ -671,7 +1049,7 @@ export function startFirestoreSubscriptions(firebaseUser) {
     )
   );
 
-  // 4. Subscribe to Club Players
+  // 5. Subscribe to Club Players (club-scoped)
   activeUnsubscribes.push(
     onSnapshot(
       query(collection(db, 'players'), where('clubId', '==', clubId)),
@@ -682,57 +1060,59 @@ export function startFirestoreSubscriptions(firebaseUser) {
     )
   );
 
-  // 5. Subscribe to Matches & Lineups
+  // 6. Subscribe to Club Matches (strictly club-scoped!)
   activeUnsubscribes.push(
-    onSnapshot(collection(db, 'matches'), snap => {
-      const allM = {};
-      const byTeam = {};
-      snap.docs.forEach(d => {
-        const data = d.data();
-        allM[data.matchId] = data;
-        if (data.teamId === appState.selectedTeamId) {
-          byTeam[data.matchId] = data;
-        }
-      });
-      appState.allMatches = allM;
-      appState.matchesByTeam = byTeam;
-      notifyAppState();
-    })
+    onSnapshot(
+      query(collection(db, 'matches'), where('clubId', '==', clubId)),
+      snap => {
+        const allM = {};
+        const byTeam = {};
+        snap.docs.forEach(d => {
+          const data = d.data();
+          allM[data.matchId] = data;
+          if (data.teamId === appState.selectedTeamId) {
+            byTeam[data.matchId] = data;
+          }
+        });
+        appState.allMatches = allM;
+        appState.matchesByTeam = byTeam;
+        notifyAppState();
+      },
+      err => console.error('Matches subscription error:', err)
+    )
   );
 
+  // 7. Subscribe to Club Lineups (strictly club-scoped!)
   activeUnsubscribes.push(
-    onSnapshot(collection(db, 'lineups'), snap => {
-      const byMatch = {};
-      const sameDate = [];
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (!byMatch[data.matchId]) byMatch[data.matchId] = {};
-        byMatch[data.matchId][data.quarter] = data;
-        if (data.date === appState.selectedDate) {
-          sameDate.push(data);
-        }
-      });
-      appState.lineupsByMatch = byMatch;
-      appState.sameDateLineupsAllTeams = sameDate;
-      appState.syncState = 'synced';
-      notifyAppState();
-    })
+    onSnapshot(
+      query(collection(db, 'lineups'), where('clubId', '==', clubId)),
+      snap => {
+        const byMatch = {};
+        const sameDate = [];
+        snap.docs.forEach(d => {
+          const data = d.data();
+          if (!byMatch[data.matchId]) byMatch[data.matchId] = {};
+          byMatch[data.matchId][data.quarter] = data;
+          if (data.date === appState.selectedDate) {
+            sameDate.push(data);
+          }
+        });
+        appState.lineupsByMatch = byMatch;
+        appState.sameDateLineupsAllTeams = sameDate;
+        appState.syncState = 'synced';
+        notifyAppState();
+      },
+      err => console.error('Lineups subscription error:', err)
+    )
   );
 }
 
 function filterAccessibleTeams() {
   if (!appState.userProfile) {
-    appState.teams = appState.allClubTeams;
+    appState.teams = [];
     return;
   }
-  const { role, assignedTeamIds = [] } = appState.userProfile;
-  if (role === 'admin') {
-    appState.teams = [...appState.allClubTeams];
-  } else {
-    appState.teams = appState.allClubTeams.filter(t =>
-      assignedTeamIds.includes(t.teamId)
-    );
-  }
+  appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
   if (
     appState.teams.length > 0 &&
     !appState.teams.some(t => t.teamId === appState.selectedTeamId)
@@ -1050,14 +1430,17 @@ export function selectDate(dateStr) {
 
 export async function saveMatchMetadata(updates) {
   const current = getCurrentMatchDoc();
+  const clubId = getActiveClubId();
   const updatedMatch = {
     ...current,
     ...updates,
+    clubId,
     updatedAt: new Date().toISOString(),
     updatedBy: appState.currentUser?.uid || 'local_coach_1'
   };
 
   // Optimistic update
+  appState.allMatches[updatedMatch.matchId] = updatedMatch;
   appState.matchesByTeam[updatedMatch.matchId] = updatedMatch;
   notifyAppState();
 
@@ -1078,9 +1461,11 @@ export async function saveMatchMetadata(updates) {
 export async function saveQuarterLineup(quarter, updates) {
   const match = getCurrentMatchDoc();
   const currentQ = getQuarterLineupDoc(quarter, match.matchId);
+  const clubId = getActiveClubId();
   const updatedLineup = {
     ...currentQ,
     ...updates,
+    clubId,
     lineupId: getLineupId(match.matchId, quarter),
     matchId: match.matchId,
     teamId: match.teamId,
@@ -1126,13 +1511,14 @@ export async function addClubPlayer({
   const cleanLast = (lastName || '').trim();
   if (!cleanFirst) return;
 
+  const clubId = getActiveClubId();
   const displayName = cleanLast ? `${cleanFirst} ${cleanLast}` : cleanFirst;
   const playerId = `player_${Date.now()}_${cleanFirst.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
   const allowed = Array.from(new Set([primaryTeamId || team.teamId, ...sharedWithTeamIds]));
 
   const newPlayer = {
     playerId,
-    clubId: DEFAULT_CLUB_ID,
+    clubId,
     ageGroup: team.ageGroup || 'U10',
     firstName: cleanFirst,
     lastName: cleanLast,
@@ -1257,56 +1643,112 @@ export async function clearCurrentTeamPlayers(teamId = appState.selectedTeamId) 
 }
 
 /**
- * Milestone 5B: Club Admin — Pre-authorize or invite a coach by email and assign teams/role
+ * Milestone 13: Club Admin — Pre-authorize or invite a coach/lead/viewer/admin by email
+ * Writes to dedicated `invites/{inviteId}` collection so invitees can securely claim on sign-in.
  */
 export async function inviteOrPreAuthorizeCoach({
   email,
   displayName,
   role = 'coach',
-  assignedTeamIds = []
+  assignedTeamIds = [],
+  assignedAgeGroups = []
 }) {
   const cleanEmail = (email || '').trim().toLowerCase();
   if (!cleanEmail) throw new Error('Coach email is required.');
 
-  const cleanName =
-    (displayName || '').trim() || cleanEmail.split('@')[0];
-  const uid = `invite_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
-  const defaultTeams =
-    assignedTeamIds.length > 0 ? assignedTeamIds : [appState.selectedTeamId];
+  const clubId = getActiveClubId();
+  const clubName = appState.club?.shortName || appState.club?.name || DEFAULT_CLUB_NAME;
+  const safeRole = normalizeRole(role);
+  const cleanName = (displayName || '').trim() || cleanEmail.split('@')[0];
+  const inviteId = `${clubId}__${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
 
-  const coachDoc = {
-    uid,
+  const defaultTeams =
+    safeRole === 'admin'
+      ? appState.allClubTeams.map(t => t.teamId)
+      : assignedTeamIds.length > 0
+      ? assignedTeamIds
+      : safeRole === 'lead' && assignedAgeGroups.length > 0
+      ? appState.allClubTeams
+          .filter(t => assignedAgeGroups.includes(t.ageGroup))
+          .map(t => t.teamId)
+      : [appState.selectedTeamId].filter(Boolean);
+
+  const cleanAgeGroups =
+    safeRole === 'lead'
+      ? Array.from(new Set(assignedAgeGroups.filter(Boolean)))
+      : [];
+
+  const inviteDoc = {
+    inviteId,
+    clubId,
+    clubName,
     email: cleanEmail,
     displayName: cleanName,
-    role,
-    clubId: DEFAULT_CLUB_ID,
-    assignedTeamIds: defaultTeams,
-    isInvite: true
+    role: safeRole,
+    assignedTeamIds: Array.from(new Set(defaultTeams)),
+    assignedAgeGroups: cleanAgeGroups,
+    status: 'pending',
+    invitedBy: appState.userProfile?.uid || appState.currentUser?.uid || 'local_coach_1',
+    createdAt: new Date().toISOString()
   };
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), coachDoc, { merge: true });
+    await setDoc(doc(db, 'invites', inviteId), inviteDoc);
   } else {
     const store = loadLocalStore();
-    store.users[uid] = coachDoc;
+    if (!store.invites) store.invites = {};
+    store.invites[inviteId] = inviteDoc;
     saveLocalStore(store);
   }
-  return coachDoc;
+  return inviteDoc;
+}
+
+export async function revokeClubInvite(inviteId) {
+  if (!inviteId) return;
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'invites', inviteId));
+  } else {
+    const store = loadLocalStore();
+    if (store.invites) {
+      delete store.invites[inviteId];
+      saveLocalStore(store);
+    }
+  }
 }
 
 export async function updateCoachRole(uid, newRole) {
   const user = appState.allClubUsers.find(u => u.uid === uid);
   if (!user) return;
-  const updated = { ...user, role: newRole };
+  const check = canModifyUserRole(appState.userProfile, user, newRole, appState.allClubUsers);
+  if (!check.ok) {
+    throw new Error(check.reason);
+  }
+
+  const safeRole = normalizeRole(newRole);
+  const patch = {
+    role: safeRole,
+    updatedAt: new Date().toISOString()
+  };
+  // If promoting to Age-Group Lead and no age groups set yet, seed from their assigned teams
+  if (safeRole === 'lead' && (!user.assignedAgeGroups || user.assignedAgeGroups.length === 0)) {
+    const teamGroups = appState.allClubTeams
+      .filter(t => (user.assignedTeamIds || []).includes(t.teamId))
+      .map(t => t.ageGroup)
+      .filter(Boolean);
+    if (teamGroups.length > 0) {
+      patch.assignedAgeGroups = Array.from(new Set(teamGroups));
+    }
+  }
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), { role: newRole }, { merge: true });
+    await setDoc(doc(db, 'users', uid), patch, { merge: true });
   } else {
     const store = loadLocalStore();
     if (store.users[uid]) {
-      store.users[uid] = updated;
+      store.users[uid] = { ...store.users[uid], ...patch };
       saveLocalStore(store);
     }
   }
@@ -1325,7 +1767,7 @@ export async function toggleCoachTeamAssignment(uid, teamId) {
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), { assignedTeamIds }, { merge: true });
+    await setDoc(doc(db, 'users', uid), { assignedTeamIds, updatedAt: new Date().toISOString() }, { merge: true });
   } else {
     const store = loadLocalStore();
     if (store.users[uid]) {
@@ -1335,7 +1777,58 @@ export async function toggleCoachTeamAssignment(uid, teamId) {
   }
 }
 
+export async function toggleCoachAgeGroupAssignment(uid, ageGroup) {
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user || !ageGroup) return;
+  const current = new Set(user.assignedAgeGroups || []);
+  if (current.has(ageGroup)) {
+    current.delete(ageGroup);
+  } else {
+    current.add(ageGroup);
+  }
+  const assignedAgeGroups = Array.from(current);
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), { assignedAgeGroups, updatedAt: new Date().toISOString() }, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.users[uid]) {
+      store.users[uid].assignedAgeGroups = assignedAgeGroups;
+      saveLocalStore(store);
+    }
+  }
+}
+
+export async function toggleCoachStatus(uid) {
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user) return;
+  const currentlyActive = !user.status || user.status === 'active';
+  if (currentlyActive) {
+    const check = canRemoveUser(appState.userProfile, user, appState.allClubUsers);
+    if (!check.ok) throw new Error(check.reason);
+  }
+  const nextStatus = currentlyActive ? 'suspended' : 'active';
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), { status: nextStatus, updatedAt: new Date().toISOString() }, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.users[uid]) {
+      store.users[uid].status = nextStatus;
+      saveLocalStore(store);
+    }
+  }
+  return nextStatus;
+}
+
 export async function removeCoachProfile(uid) {
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  const check = canRemoveUser(appState.userProfile, user, appState.allClubUsers);
+  if (!check.ok) {
+    throw new Error(check.reason);
+  }
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
     await deleteDoc(doc(db, 'users', uid));
@@ -1346,25 +1839,267 @@ export async function removeCoachProfile(uid) {
   }
 }
 
-export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7', defaultQtrMins = 12 }) {
+// --- CLUB JOIN CODE & APPROVAL QUEUE (Milestone 13 & 14) ---
+
+export async function setClubJoinCode({ code, active = true, defaultRole = 'coach' }) {
+  const clubId = getActiveClubId();
+  const cleanCode = normalizeJoinCode(code);
+  if (!cleanCode || cleanCode.length < 4) {
+    throw new Error('Join code must be at least 4 letters/numbers (e.g. STRAFFAN-2026).');
+  }
+
+  const oldCode = normalizeJoinCode(appState.club?.joinCode || '');
+  const clubName = appState.club?.shortName || appState.club?.name || DEFAULT_CLUB_NAME;
+  const now = new Date().toISOString();
+  const joinCodeDoc = {
+    code: cleanCode,
+    clubId,
+    clubName,
+    active: Boolean(active),
+    defaultRole: normalizeRole(defaultRole),
+    updatedAt: now,
+    updatedBy: appState.userProfile?.uid || 'local_coach_1'
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    // Deactivate old code if rotating to a new code
+    if (oldCode && oldCode !== cleanCode) {
+      try {
+        await setDoc(doc(db, 'joinCodes', oldCode), { active: false, updatedAt: now }, { merge: true });
+      } catch (_) {}
+    }
+    await setDoc(doc(db, 'joinCodes', cleanCode), joinCodeDoc, { merge: true });
+    await setDoc(
+      doc(db, 'clubs', clubId),
+      {
+        joinCode: cleanCode,
+        joinCodeEnabled: Boolean(active),
+        joinDefaultRole: normalizeRole(defaultRole)
+      },
+      { merge: true }
+    );
+  } else {
+    const store = loadLocalStore();
+    if (!store.joinCodes) store.joinCodes = {};
+    if (oldCode && oldCode !== cleanCode && store.joinCodes[oldCode]) {
+      store.joinCodes[oldCode].active = false;
+    }
+    store.joinCodes[cleanCode] = joinCodeDoc;
+    if (store.clubs[clubId]) {
+      store.clubs[clubId].joinCode = cleanCode;
+      store.clubs[clubId].joinCodeEnabled = Boolean(active);
+      store.clubs[clubId].joinDefaultRole = normalizeRole(defaultRole);
+    }
+    saveLocalStore(store);
+  }
+  return joinCodeDoc;
+}
+
+export async function submitJoinCodeRequest({ joinCode, displayName = '', note = '' }) {
+  const cleanCode = normalizeJoinCode(joinCode);
+  if (!cleanCode) {
+    throw new Error('Please enter a Club Join Code.');
+  }
+
+  const firebaseUser = appState.currentUser;
+  if (!firebaseUser) {
+    throw new Error('Please sign in first.');
+  }
+
+  if (appState.mode !== 'firebase') {
+    throw new Error('Join codes are used in Firebase Cloud mode.');
+  }
+
+  const { db } = getFirebaseServices();
+  const codeSnap = await getDoc(doc(db, 'joinCodes', cleanCode));
+  if (!codeSnap.exists()) {
+    throw new Error(`Join code "${cleanCode}" was not found. Double-check with your Club Admin.`);
+  }
+  const codeData = codeSnap.data();
+  if (!codeData.active) {
+    throw new Error(`Join code "${cleanCode}" is currently disabled. Ask your Club Admin for an active code or email invite.`);
+  }
+
+  const requestId = `${codeData.clubId}__${firebaseUser.uid}`;
+  const reqDoc = {
+    requestId,
+    clubId: codeData.clubId,
+    clubName: codeData.clubName || 'Club',
+    uid: firebaseUser.uid,
+    email: (firebaseUser.email || '').trim().toLowerCase(),
+    displayName: (displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Coach').trim(),
+    joinCode: cleanCode,
+    requestedRole: codeData.defaultRole || 'coach',
+    note: (note || '').trim(),
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  await setDoc(doc(db, 'joinRequests', requestId), reqDoc);
+  appState.pendingJoinRequest = reqDoc;
+  appState.accessStatus = 'pending_approval';
+  notifyAppState();
+  return reqDoc;
+}
+
+export async function cancelPendingJoinRequest(requestId) {
+  if (!requestId) return;
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'joinRequests', requestId));
+  }
+  appState.pendingJoinRequest = null;
+  appState.accessStatus = 'needs_onboarding';
+  notifyAppState();
+}
+
+export async function approveJoinRequest({
+  requestId,
+  role = 'coach',
+  assignedTeamIds = [],
+  assignedAgeGroups = []
+}) {
+  const req = appState.allClubJoinRequests.find(r => r.requestId === requestId);
+  if (!req) throw new Error('Join request not found.');
+
+  const clubId = getActiveClubId();
+  const safeRole = normalizeRole(role);
+  const now = new Date().toISOString();
+
+  const finalTeams =
+    safeRole === 'admin'
+      ? appState.allClubTeams.map(t => t.teamId)
+      : assignedTeamIds.length > 0
+      ? assignedTeamIds
+      : safeRole === 'lead' && assignedAgeGroups.length > 0
+      ? appState.allClubTeams
+          .filter(t => assignedAgeGroups.includes(t.ageGroup))
+          .map(t => t.teamId)
+      : [];
+
+  const finalAgeGroups =
+    safeRole === 'lead'
+      ? Array.from(new Set(assignedAgeGroups.filter(Boolean)))
+      : [];
+
+  const newUserDoc = {
+    uid: req.uid,
+    email: req.email,
+    displayName: req.displayName || req.email?.split('@')[0] || 'Coach',
+    role: safeRole,
+    status: 'active',
+    clubId,
+    assignedTeamIds: Array.from(new Set(finalTeams)),
+    assignedAgeGroups: finalAgeGroups,
+    approvedBy: appState.userProfile?.uid || 'local_coach_1',
+    createdAt: now,
+    updatedAt: now
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', req.uid), newUserDoc, { merge: true });
+    await setDoc(
+      doc(db, 'joinRequests', requestId),
+      {
+        status: 'approved',
+        assignedRole: safeRole,
+        reviewedBy: appState.userProfile?.uid || 'local_coach_1',
+        reviewedAt: now
+      },
+      { merge: true }
+    );
+  } else {
+    const store = loadLocalStore();
+    store.users[req.uid] = newUserDoc;
+    if (store.joinRequests?.[requestId]) {
+      store.joinRequests[requestId].status = 'approved';
+      store.joinRequests[requestId].reviewedAt = now;
+    }
+    saveLocalStore(store);
+  }
+  return newUserDoc;
+}
+
+export async function rejectJoinRequest(requestId) {
+  if (!requestId) return;
+  const now = new Date().toISOString();
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(
+      doc(db, 'joinRequests', requestId),
+      {
+        status: 'rejected',
+        reviewedBy: appState.userProfile?.uid || 'local_coach_1',
+        reviewedAt: now
+      },
+      { merge: true }
+    );
+  } else {
+    const store = loadLocalStore();
+    if (store.joinRequests?.[requestId]) {
+      store.joinRequests[requestId].status = 'rejected';
+      store.joinRequests[requestId].reviewedAt = now;
+    }
+    saveLocalStore(store);
+  }
+}
+
+export async function updateClubSettings({ name, shortName, joinCodeEnabled }) {
+  const clubId = getActiveClubId();
+  const patch = {};
+  if (name !== undefined && name.trim()) patch.name = name.trim();
+  if (shortName !== undefined && shortName.trim()) patch.shortName = shortName.trim();
+  if (joinCodeEnabled !== undefined) patch.joinCodeEnabled = Boolean(joinCodeEnabled);
+  patch.updatedAt = new Date().toISOString();
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'clubs', clubId), patch, { merge: true });
+    if (joinCodeEnabled !== undefined && appState.club?.joinCode) {
+      await setDoc(
+        doc(db, 'joinCodes', normalizeJoinCode(appState.club.joinCode)),
+        {
+          active: Boolean(joinCodeEnabled),
+          clubName: patch.shortName || appState.club.shortName || DEFAULT_CLUB_NAME,
+          updatedAt: patch.updatedAt
+        },
+        { merge: true }
+      );
+    }
+  } else {
+    const store = loadLocalStore();
+    if (store.clubs[clubId]) {
+      store.clubs[clubId] = { ...store.clubs[clubId], ...patch };
+    }
+    saveLocalStore(store);
+  }
+}
+
+export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7', defaultQtrMins = 12, defaultPeriods = 4 }) {
   const cleanName = name.trim();
   if (!cleanName) return;
-  const teamId = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const clubId = getActiveClubId();
+  const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const teamId = clubId === DEFAULT_CLUB_ID ? slug : `${clubId}__${slug}`;
 
   const newTeam = {
     teamId,
-    clubId: DEFAULT_CLUB_ID,
+    clubId,
     name: cleanName,
     ageGroup: (ageGroup || 'U10').trim(),
     defaultFormation,
     defaultQtrMins: parseFloat(defaultQtrMins) || 12,
+    defaultPeriods: Number(defaultPeriods) || 4,
     coachIds: [appState.currentUser?.uid || 'local_coach_1']
   };
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
     await setDoc(doc(db, 'teams', teamId), newTeam, { merge: true });
-    if (appState.userProfile) {
+    // Only Club Admins update their own assignedTeamIds; Age-Group Leads get access via assignedAgeGroups
+    if (appState.userProfile && isClubAdmin(appState.userProfile)) {
       const assigned = Array.from(new Set([...(appState.userProfile.assignedTeamIds || []), teamId]));
       await setDoc(
         doc(db, 'users', appState.userProfile.uid),
@@ -1376,7 +2111,7 @@ export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7',
     const store = loadLocalStore();
     store.teams[teamId] = newTeam;
     const uid = appState.userProfile?.uid || 'local_coach_1';
-    if (store.users[uid]) {
+    if (store.users[uid] && isClubAdmin(store.users[uid])) {
       store.users[uid].assignedTeamIds = Array.from(
         new Set([...(store.users[uid].assignedTeamIds || []), teamId])
       );
@@ -1385,6 +2120,43 @@ export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7',
   }
 
   return newTeam;
+}
+
+export async function updateClubTeam(teamId, updates = {}) {
+  if (!teamId) return;
+  const patch = {
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+  if (patch.defaultQtrMins !== undefined) {
+    patch.defaultQtrMins = parseFloat(patch.defaultQtrMins) || 12;
+  }
+  if (patch.defaultPeriods !== undefined) {
+    patch.defaultPeriods = Number(patch.defaultPeriods) || 4;
+  }
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'teams', teamId), patch, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.teams[teamId]) {
+      store.teams[teamId] = { ...store.teams[teamId], ...patch };
+      saveLocalStore(store);
+    }
+  }
+}
+
+export async function deleteClubTeam(teamId) {
+  if (!teamId) return;
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'teams', teamId));
+  } else {
+    const store = loadLocalStore();
+    delete store.teams[teamId];
+    saveLocalStore(store);
+  }
 }
 
 /**
@@ -1460,6 +2232,7 @@ export async function publishAgeGroupSquadSplit({
 
     const matchDoc = {
       ...existingMatch,
+      clubId: getActiveClubId(),
       matchId,
       teamId: tId,
       date: dateStr,
@@ -1564,6 +2337,7 @@ export async function publishAgeGroupSquadSplit({
       }
 
       const lineupDoc = {
+        clubId: getActiveClubId(),
         lineupId,
         matchId,
         teamId: tId,
@@ -1715,6 +2489,7 @@ export async function importLegacyPayloadObject(legacy, sourceLabel = 'uFootball
     const matchId = getMatchId(team.teamId, dateStr);
     const formation = legacy.formation || team.defaultFormation || '7v7';
     const matchDoc = {
+      clubId: getActiveClubId(),
       matchId,
       teamId: team.teamId,
       date: dateStr,
@@ -1741,6 +2516,7 @@ export async function importLegacyPayloadObject(legacy, sourceLabel = 'uFootball
       if (!qData) continue;
       const lineupId = getLineupId(matchId, q);
       const lineupDoc = {
+        clubId: getActiveClubId(),
         lineupId,
         matchId,
         teamId: team.teamId,

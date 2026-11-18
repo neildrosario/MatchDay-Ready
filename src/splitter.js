@@ -6,6 +6,10 @@ import {
   createClubTeam,
   publishAgeGroupSquadSplit
 } from './db.js';
+import {
+  canPublishSquadSplit,
+  canCreateTeamInAgeGroup
+} from './permissions.js';
 
 // Draft state keyed by `${ageGroup}_${dateStr}` so switching tabs keeps the draft
 const splitterDrafts = {};
@@ -169,6 +173,9 @@ export function resetSplitterToPrimary() {
 export async function handleQuickAddAgeGroupTeam() {
   const input = document.getElementById('splitterNewTeamInput');
   const { ageGroup } = getAgeGroupContext();
+  if (!canCreateTeamInAgeGroup(appState.userProfile, ageGroup)) {
+    return alert('Only a Club Admin or Age-Group Lead for this age group can add new teams.');
+  }
   const currentTeam = getSelectedTeam();
   const rawName = input?.value.trim();
 
@@ -190,6 +197,11 @@ export async function handleQuickAddAgeGroupTeam() {
 
 export async function handlePublishSquadSplit() {
   const { ageGroup, teams, players } = getAgeGroupContext();
+  if (!canPublishSquadSplit(appState.userProfile, ageGroup, appState.allClubTeams)) {
+    return alert(
+      `Only a Club Admin, ${ageGroup} Age-Group Lead, or coach assigned to all ${ageGroup} teams can publish a squad split.`
+    );
+  }
   const draft = ensureDraftInitialized();
   const autoGenCheckbox = document.getElementById('splitterAutoGenLineupsCheckbox');
   const autoGenerateLineups = autoGenCheckbox ? autoGenCheckbox.checked : true;
@@ -264,6 +276,24 @@ export function renderSquadSplitter() {
 
   const { ageGroup, teams, players } = getAgeGroupContext();
   const draft = ensureDraftInitialized();
+  const canPublish = canPublishSquadSplit(appState.userProfile, ageGroup, appState.allClubTeams);
+  const canAddTeam = canCreateTeamInAgeGroup(appState.userProfile, ageGroup);
+
+  const permBanner = document.getElementById('splitterPermissionBanner');
+  if (permBanner) {
+    permBanner.classList.toggle('hidden', canPublish);
+    if (!canPublish) {
+      permBanner.innerText = `👁️ View-only for Squad Splitter: only a Club Admin or ${ageGroup} Age-Group Lead (or a coach assigned to all ${ageGroup} teams) can publish splits.`;
+    }
+  }
+  const addTeamRow = document.getElementById('splitterAddTeamRow');
+  if (addTeamRow) addTeamRow.classList.toggle('hidden', !canAddTeam);
+  const publishBtn = document.getElementById('splitterPublishBtn');
+  if (publishBtn) {
+    publishBtn.disabled = !canPublish;
+    publishBtn.classList.toggle('opacity-50', !canPublish);
+    publishBtn.classList.toggle('cursor-not-allowed', !canPublish);
+  }
 
   const headerTitle = document.getElementById('splitterAgeGroupTitle');
   const subtitleEl = document.getElementById('splitterSubtitle');

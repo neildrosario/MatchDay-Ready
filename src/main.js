@@ -11,7 +11,12 @@ import {
   handleLogout,
   handleSaveFirebaseConfigUI,
   handleDisconnectFirebaseUI,
-  renderAuthStatusBanner
+  renderAuthStatusBanner,
+  renderAccessGate,
+  handleSubmitJoinCodeUI,
+  handleCancelJoinRequestUI,
+  handleRecheckAccessUI,
+  dismissClaimedInviteNotice
 } from './auth.js';
 import {
   renderPitch,
@@ -43,6 +48,9 @@ import {
   handleClearTeamPlayersUI,
   handleCreateTeamUI,
   handleInviteCoachUI,
+  handleCopyJoinCodeUI,
+  handleRotateJoinCodeUI,
+  handleToggleJoinCodeActiveUI,
   handleImportLegacyUI,
   closeBetaImportModal,
   handleConfirmLocalBetaImport,
@@ -128,6 +136,9 @@ Object.assign(window, {
   handleClearTeamPlayersUI,
   handleCreateTeamUI,
   handleInviteCoachUI,
+  handleCopyJoinCodeUI,
+  handleRotateJoinCodeUI,
+  handleToggleJoinCodeActiveUI,
   handleImportLegacyUI,
   closeBetaImportModal,
   handleConfirmLocalBetaImport,
@@ -155,12 +166,18 @@ Object.assign(window, {
   useLocalSandboxCoach,
   handleLogout,
   handleSaveFirebaseConfigUI,
-  handleDisconnectFirebaseUI
+  handleDisconnectFirebaseUI,
+  renderAccessGate,
+  handleSubmitJoinCodeUI,
+  handleCancelJoinRequestUI,
+  handleRecheckAccessUI,
+  dismissClaimedInviteNotice
 });
 
 document.addEventListener('DOMContentLoaded', () => {
   subscribeAppState(() => {
     renderAuthStatusBanner();
+    renderAccessGate();
     renderPitch();
     renderMatchTimer();
     renderAdminCoachesPanel();

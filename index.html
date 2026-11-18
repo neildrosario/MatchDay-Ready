@@ -62,6 +62,21 @@
   <!-- Main Content Container -->
   <main class="max-w-md mx-auto p-3">
 
+    <!-- MILESTONE 13: ACCESS / ROLE STATUS BANNERS -->
+    <div id="claimedInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200 flex items-center justify-between gap-2">
+      <span id="claimedInviteText" class="font-semibold"></span>
+      <button onclick="dismissClaimedInviteNotice()" class="text-emerald-300 hover:text-white font-bold px-1">✕</button>
+    </div>
+
+    <div id="viewerReadOnlyBanner" class="hidden bg-slate-800 border border-slate-600 rounded-lg p-2 mb-3 text-[11px] text-slate-300 flex items-center gap-2">
+      <span>👁️</span>
+      <span><strong>Read-Only Viewer Mode:</strong> You can view lineups, timer, stats &amp; export Share Sheets, while editing is disabled.</span>
+    </div>
+
+    <div id="noTeamsAssignedBanner" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-lg p-2.5 mb-3 text-xs text-amber-200">
+      ℹ️ You have no teams assigned yet. Ask your Club Admin to assign you to a team or age group.
+    </div>
+
     <!-- CLUB & FIREBASE CLOUD SETTINGS ACCORDION -->
     <details class="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 mb-3 text-xs">
       <summary class="font-bold text-slate-300 cursor-pointer flex justify-between items-center">
@@ -84,8 +99,8 @@
         </div>
 
         <!-- Add New Club Team -->
-        <div class="pt-2 border-t border-slate-700/70">
-          <p class="text-[11px] text-slate-300 font-semibold mb-1.5">🛡️ Add New Club Team (Straffan AFC):</p>
+        <div id="settingsAddTeamSection" class="pt-2 border-t border-slate-700/70">
+          <p class="text-[11px] text-slate-300 font-semibold mb-1.5">🛡️ Add New Club Team:</p>
           <div class="flex gap-1.5">
             <input type="text" id="newTeamNameInput" placeholder="e.g. U10 Blue" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
             <input type="text" id="newTeamAgeInput" placeholder="U10" value="U10" class="w-14 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-center text-white">
@@ -100,25 +115,67 @@
           </div>
         </div>
 
-        <!-- Milestone 5B: Club Admin Coach & Team Permissions Manager -->
-        <div id="adminCoachesSection" class="pt-2 border-t border-slate-700/70 space-y-2">
-          <p class="text-[11px] text-emerald-400 font-bold">👥 Admin: Manage Coaches & Team Access</p>
-          <div class="bg-slate-900/60 p-2 rounded border border-slate-700 space-y-2">
-            <p class="text-[10px] text-slate-400">Pre-authorize a coach by email and assign their teams:</p>
+        <!-- Milestone 13: Club Admin Access Control (4 Roles, Email Invites, Join Code & Approval Queue) -->
+        <div id="adminCoachesSection" class="hidden pt-2 border-t border-slate-700/70 space-y-2.5">
+          <p class="text-[11px] text-emerald-400 font-bold">🛡️ Club Admin: Coaches, Invites &amp; Join Code</p>
+
+          <!-- Club Join Code Card -->
+          <div class="bg-slate-900/70 p-2 rounded border border-slate-700 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <p class="text-[10px] font-bold text-slate-300">🔑 Club Join Code (with Approval Queue):</p>
+                <p class="text-[9px] text-slate-400">Coaches who enter this code appear below for your approval.</p>
+              </div>
+              <span id="adminJoinCodeDisplay" class="font-mono font-extrabold text-xs text-emerald-300 bg-slate-950 px-2 py-1 rounded border border-emerald-500/40">STRAFFAN-2026</span>
+            </div>
             <div class="flex gap-1.5">
-              <input type="text" id="inviteCoachNameInput" placeholder="Coach Name" class="w-28 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+              <button onclick="handleCopyJoinCodeUI()" class="flex-1 bg-emerald-600/80 hover:bg-emerald-500 py-1 rounded font-bold text-[10px]">📋 Copy WhatsApp Link</button>
+              <button onclick="handleRotateJoinCodeUI()" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded font-semibold text-[10px]">🔄 Rotate</button>
+              <button id="adminJoinCodeToggleBtn" onclick="handleToggleJoinCodeActiveUI()" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded font-semibold text-[10px]">Disable</button>
+            </div>
+          </div>
+
+          <!-- Pending Join Requests Queue -->
+          <div class="space-y-1">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-amber-400">⏳ Pending Join-Code Requests</p>
+            <div id="adminJoinRequestsList" class="space-y-1.5"></div>
+          </div>
+
+          <!-- Invite Coach by Email -->
+          <div class="bg-slate-900/60 p-2 rounded border border-slate-700 space-y-2">
+            <p class="text-[10px] text-slate-300 font-semibold">✉️ Pre-Authorize / Invite by Email:</p>
+            <div class="flex gap-1.5">
+              <input type="text" id="inviteCoachNameInput" placeholder="Name" class="w-24 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
               <input type="email" id="inviteCoachEmailInput" placeholder="coach@straffanafc.ie" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
               <select id="inviteCoachRoleSelect" class="bg-slate-900 px-1.5 py-1 rounded border border-slate-600 text-[11px] text-white font-semibold">
                 <option value="coach" selected>Coach</option>
-                <option value="admin">Admin</option>
+                <option value="lead">Age Lead</option>
                 <option value="viewer">Viewer</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
-            <div id="inviteCoachTeamCheckboxes" class="flex flex-wrap gap-1.5"></div>
-            <button onclick="handleInviteCoachUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-1.5 rounded font-bold text-[11px]">+ Authorize Coach & Assign Teams</button>
+            <div>
+              <p class="text-[9px] text-slate-400 mb-1">Assign Teams:</p>
+              <div id="inviteCoachTeamCheckboxes" class="flex flex-wrap gap-1.5"></div>
+            </div>
+            <div>
+              <p class="text-[9px] text-sky-400 mb-1">Age Groups (for Age-Group Lead role):</p>
+              <div id="inviteCoachAgeGroupCheckboxes" class="flex flex-wrap gap-1.5"></div>
+            </div>
+            <button onclick="handleInviteCoachUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-1.5 rounded font-bold text-[11px]">+ Send Email Invite &amp; Pre-Authorize</button>
           </div>
 
-          <div class="space-y-1.5 max-h-52 overflow-y-auto" id="adminCoachesList"></div>
+          <!-- Pending Email Invites -->
+          <div class="space-y-1">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">📨 Pending Email Invites</p>
+            <div id="adminPendingInvitesList" class="space-y-1"></div>
+          </div>
+
+          <!-- Active Club Members -->
+          <div class="space-y-1">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">👥 Club Members &amp; Roles</p>
+            <div class="space-y-1.5 max-h-60 overflow-y-auto" id="adminCoachesList"></div>
+          </div>
         </div>
 
         <!-- Migrate Legacy Prototype Data -->
@@ -216,7 +273,7 @@
       </div>
 
       <!-- Action Toolbar (Auto-Fill, Swaps & Match Events — Milestones 11 & 12) -->
-      <div class="space-y-1.5 mb-3">
+      <div id="pitchActionToolbar" class="space-y-1.5 mb-3">
         <div class="grid grid-cols-3 gap-1.5">
           <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
             🪄 Auto-Fair
@@ -269,7 +326,7 @@
       <div id="swapLogContainer" class="hidden bg-slate-800/80 border border-amber-500/40 rounded-lg p-2.5 mb-3 text-xs">
         <div class="flex justify-between items-center mb-1">
           <span class="font-bold text-amber-400">🔄 Mid-Period Changes Log (50/50 Minutes Split)</span>
-          <button onclick="clearSwaps()" class="text-[10px] text-rose-400 underline">Reset Swaps</button>
+          <button id="resetSwapsBtn" onclick="clearSwaps()" class="text-[10px] text-rose-400 underline">Reset Swaps</button>
         </div>
         <div id="swapLogList" class="space-y-1 text-slate-300"></div>
       </div>
@@ -278,20 +335,21 @@
       <div id="matchEventsContainer" class="hidden bg-slate-800/80 border border-emerald-500/40 rounded-lg p-2.5 mb-3 text-xs">
         <div class="flex justify-between items-center mb-1.5">
           <span class="font-bold text-emerald-400">⚽ Match Highlights & Events Log</span>
-          <button onclick="openEventModal()" class="text-[10px] bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold">+ Add</button>
+          <button id="addEventInlineBtn" onclick="openEventModal()" class="text-[10px] bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold">+ Add</button>
         </div>
         <div id="matchEventsList" class="space-y-1 text-slate-200"></div>
       </div>
 
       <!-- Bottom Actions -->
       <div class="flex gap-2 pb-6">
-        <button onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
+        <button id="copyPrevQtrBtn" onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
         <button onclick="exportTeamSheet()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
       </div>
     </div>
 
     <!-- VIEW 3: AGE-GROUP MATCHDAY SQUAD SPLITTER (Milestone 8: 25 Kids -> 3 Teams) -->
     <div id="view-splitter" class="hidden pb-12 space-y-3">
+      <div id="splitterPermissionBanner" class="hidden bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-[11px] text-slate-300"></div>
       <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-2">
         <div class="flex justify-between items-start gap-2">
           <div>
@@ -311,7 +369,7 @@
         </div>
 
         <!-- Need a 3rd / 4th team for this age group? Quick Add -->
-        <div class="flex gap-1.5 pt-2 border-t border-slate-700/70">
+        <div id="splitterAddTeamRow" class="flex gap-1.5 pt-2 border-t border-slate-700/70">
           <input type="text" id="splitterNewTeamInput" placeholder="Need another team? e.g. U10 Blue" class="flex-1 bg-slate-900 px-2.5 py-1 rounded border border-slate-700 text-xs text-white">
           <button onclick="handleQuickAddAgeGroupTeam()" class="bg-sky-600 hover:bg-sky-500 px-3 py-1 rounded font-bold text-xs">+ Add Team</button>
         </div>
@@ -327,7 +385,7 @@
           <span>⚡ Also auto-generate fair starting lineups for each team on publish</span>
         </label>
         <div class="flex gap-2">
-          <button onclick="handlePublishSquadSplit()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold text-xs shadow">
+          <button id="splitterPublishBtn" onclick="handlePublishSquadSplit()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-bold text-xs shadow">
             🚀 Publish Squads to Coaches
           </button>
           <button onclick="copySquadSplitWhatsApp()" class="bg-slate-700 hover:bg-slate-600 px-3 py-2.5 rounded-lg font-bold text-xs" title="Copy formatted squad split for WhatsApp">
@@ -348,7 +406,7 @@
     <!-- VIEW 2: PLAYER DASHBOARD & CLUB ROSTER -->
     <div id="view-stats" class="hidden pb-12">
       <!-- Add Player & Bulk Paste Squad (Milestone 5C) -->
-      <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 mb-3 space-y-2.5">
+      <div id="squadRosterEditCard" class="bg-slate-800 p-3 rounded-lg border border-slate-700 mb-3 space-y-2.5">
         <div class="flex justify-between items-center">
           <h3 class="text-sm font-bold">Squad & Shared Age-Group Roster</h3>
           <button onclick="handleClearTeamPlayersUI()" class="text-[10px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-semibold">
@@ -387,7 +445,7 @@
       </div>
 
       <!-- Shared Age-Group Pool Manager -->
-      <details class="bg-slate-800/90 rounded-lg p-3 border border-slate-700 mb-3 text-xs">
+      <details id="sharedRosterDrawer" class="bg-slate-800/90 rounded-lg p-3 border border-slate-700 mb-3 text-xs">
         <summary class="font-bold text-sky-300 cursor-pointer flex justify-between items-center">
           <span>🔗 Manage Shared Age-Group Player Pool</span>
           <span class="text-[10px] text-slate-400">Borrow / Share Players</span>
@@ -575,6 +633,90 @@
       <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
         <button onclick="useLocalSandboxCoach(&quot;Neil D'Rosario&quot;)" class="text-emerald-400 underline font-semibold">
           Continue in Local Club Mode
+        </button>
+        <button onclick="handleLogout()" class="text-rose-400 underline">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MILESTONE 13: CLUB ACCESS GATE / JOIN CODE & APPROVAL QUEUE MODAL -->
+  <div id="accessGateModal" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl space-y-4">
+      <div class="flex items-center gap-3 border-b border-slate-700 pb-3">
+        <div class="w-10 h-10 rounded-full border-2 border-emerald-400/80 shadow shrink-0 bg-emerald-950"
+             style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
+        <div class="min-w-0">
+          <div class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">MatchDay Ready • Club Access</div>
+          <h3 class="font-bold text-sm text-white">Join Your Football Club</h3>
+          <div id="accessGateEmail" class="text-[10px] text-slate-400 truncate"></div>
+        </div>
+      </div>
+
+      <!-- Rejected Request Notice -->
+      <div id="accessGateRejectedBanner" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs p-2.5 rounded">
+        Your previous join request was declined by the Club Admin. Double-check your club join code or contact your Club Admin directly.
+      </div>
+
+      <!-- Suspended Account Panel -->
+      <div id="accessGateSuspendedPanel" class="hidden bg-rose-950/60 border border-rose-500/40 rounded-lg p-3 text-xs text-rose-200 space-y-1.5">
+        <div class="font-bold text-rose-300">⏸ Account Temporarily Suspended</div>
+        <p class="text-[11px] text-slate-300">Your Club Admin has paused access for this account. Please reach out to your Club Admin to reactivate it.</p>
+      </div>
+
+      <!-- Pending Approval Waiting Panel -->
+      <div id="accessGatePendingPanel" class="hidden bg-amber-950/40 border border-amber-500/40 rounded-lg p-3.5 text-xs space-y-2.5">
+        <div class="flex items-center gap-2 text-amber-300 font-bold text-sm">
+          <span>⏳</span>
+          <span>Awaiting Club Admin Approval</span>
+        </div>
+        <p class="text-slate-200 leading-relaxed">
+          Your request to join <strong id="accessGatePendingClub" class="text-white">your club</strong>
+          (code <span id="accessGatePendingCode" class="font-mono text-amber-300 font-bold"></span>) is in the approval queue.
+        </p>
+        <p class="text-[11px] text-slate-400">
+          This screen unlocks automatically the moment your Club Admin approves your account — no need to refresh.
+        </p>
+        <button onclick="handleCancelJoinRequestUI()" class="w-full bg-slate-700 hover:bg-slate-600 py-1.5 rounded font-semibold text-[11px] text-slate-200">
+          Cancel Request &amp; Enter Different Code
+        </button>
+      </div>
+
+      <!-- Join Code Request Form Panel -->
+      <div id="accessGateJoinFormPanel" class="space-y-3">
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Your email is not pre-authorized for a club yet. Ask your Club Admin for an <strong>Email Invite</strong> or enter your <strong>Club Join Code</strong> below:
+        </p>
+
+        <div id="accessGateError" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded"></div>
+
+        <form onsubmit="handleSubmitJoinCodeUI(event)" class="space-y-2.5 text-xs">
+          <div>
+            <label class="block text-slate-400 mb-1 font-semibold">Club Join Code:</label>
+            <input type="text" id="accessGateJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-white font-mono uppercase tracking-wider font-bold">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Your Name:</label>
+            <input type="text" id="accessGateNameInput" placeholder="e.g. Alex Murphy" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Team / Role Note (Optional):</label>
+            <input type="text" id="accessGateNoteInput" placeholder="e.g. U10 Green assistant coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          </div>
+          <button type="submit" id="accessGateSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
+            🔑 Request Club Access
+          </button>
+        </form>
+
+        <button onclick="handleRecheckAccessUI()" class="w-full bg-slate-700/80 hover:bg-slate-600 py-1.5 rounded-lg font-semibold text-[11px] text-slate-200">
+          🔄 Re-Check for Pending Email Invite
+        </button>
+      </div>
+
+      <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
+        <button onclick="useLocalSandboxCoach(&quot;Demo Coach&quot;)" class="text-emerald-400 underline font-semibold">
+          Try Local Sandbox Mode
         </button>
         <button onclick="handleLogout()" class="text-rose-400 underline">
           Sign Out

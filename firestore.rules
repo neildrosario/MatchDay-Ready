@@ -2,68 +2,254 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to get user document
-    function getUserData() {
-      return request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
-        : null;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    function isAdmin() {
-      return request.auth != null && getUserData() != null && getUserData().role == 'admin';
+    function userDocPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasUserProfile() {
+      return isSignedIn() && exists(userDocPath(request.auth.uid));
+    }
+
+    function getUserData() {
+      return hasUserProfile() ? get(userDocPath(request.auth.uid)).data : null;
+    }
+
+    function isActiveUser() {
+      return hasUserProfile() && (
+        !('status' in getUserData()) || getUserData().status == 'active'
+      );
+    }
+
+    function userClubId() {
+      return isActiveUser() ? getUserData().clubId : null;
+    }
+
+    function userRole() {
+      return isActiveUser() ? getUserData().role : null;
     }
 
     function isClubMember(clubId) {
-      return request.auth != null && getUserData() != null && getUserData().clubId == clubId;
+      return isActiveUser() && clubId != null && userClubId() == clubId;
     }
 
-    function isAssignedTeam(teamId) {
-      return request.auth != null && getUserData() != null && (
-        getUserData().role == 'admin' ||
-        (getUserData().assignedTeamIds != null && teamId in getUserData().assignedTeamIds)
+    function isClubAdmin(clubId) {
+      return isClubMember(clubId) && userRole() == 'admin';
+    }
+
+    function isClubLeadForAgeGroup(clubId, ageGroup) {
+      return isClubMember(clubId)
+        && userRole() == 'lead'
+        && ageGroup != null
+        && 'assignedAgeGroups' in getUserData()
+        && getUserData().assignedAgeGroups is list
+        && ageGroup in getUserData().assignedAgeGroups;
+    }
+
+    function isAssignedTeamId(teamId) {
+      return isActiveUser()
+        && teamId != null
+        && 'assignedTeamIds' in getUserData()
+        && getUserData().assignedTeamIds is list
+        && teamId in getUserData().assignedTeamIds;
+    }
+
+    function canEditTeam(clubId, teamId) {
+      return isClubMember(clubId) && userRole() != 'viewer' && (
+        userRole() == 'admin' ||
+        isAssignedTeamId(teamId) ||
+        (
+          userRole() == 'lead'
+          && teamId != null
+          && exists(/databases/$(database)/documents/teams/$(teamId))
+          && get(/databases/$(database)/documents/teams/$(teamId)).data.clubId == clubId
+          && isClubLeadForAgeGroup(clubId, get(/databases/$(database)/documents/teams/$(teamId)).data.ageGroup)
+        )
       );
     }
 
+    function authEmailLower() {
+      return isSignedIn() && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function isValidRole(role) {
+      return role in ['admin', 'lead', 'coach', 'viewer'];
+    }
+
+    function isValidInviteClaim(newUser) {
+      return newUser.claimedInviteId is string
+        && exists(/databases/$(database)/documents/invites/$(newUser.claimedInviteId))
+        && get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.status == 'pending'
+        && authEmailLower() != ''
+        && get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.email == authEmailLower()
+        && newUser.clubId == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.clubId
+        && newUser.role == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.role
+        && newUser.status == 'active'
+        && newUser.assignedTeamIds == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.assignedTeamIds
+        && newUser.assignedAgeGroups == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.assignedAgeGroups;
+    }
+
+    // --- USERS (COACHES, AGE-GROUP LEADS, VIEWERS & CLUB ADMINS) ---
     match /users/{userId} {
-      // Any authenticated coach can read their own profile or club peers; admins can manage any user
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow delete: if isAdmin();
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isClubMember(resource.data.clubId)
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == userId
+        && isValidRole(request.resource.data.role)
+        && (
+          // 1. Club Admin creating a member (e.g., approving a join request)
+          isClubAdmin(request.resource.data.clubId)
+          // 2. Invited user claiming their exact pre-authorized invite
+          || (request.auth.uid == userId && isValidInviteClaim(request.resource.data))
+          // 3. First-time bootstrap of a brand-new club that does not exist yet
+          || (
+            request.auth.uid == userId
+            && request.resource.data.role == 'admin'
+            && request.resource.data.clubId is string
+            && !exists(/databases/$(database)/documents/clubs/$(request.resource.data.clubId))
+          )
+        );
+
+      allow update: if isSignedIn() && (
+        (
+          isClubAdmin(resource.data.clubId)
+          && request.resource.data.clubId == resource.data.clubId
+          && isValidRole(request.resource.data.role)
+        ) || (
+          // Non-admin self-updates restricted strictly to safe profile fields
+          request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastSeenAt'])
+        )
+      );
+
+      allow delete: if isClubAdmin(resource.data.clubId) && request.auth.uid != userId;
     }
 
+    // --- EMAIL INVITES (PRE-AUTHORIZED COACHES) ---
+    match /invites/{inviteId} {
+      allow read: if isSignedIn() && (
+        isClubAdmin(resource.data.clubId) ||
+        (authEmailLower() != '' && resource.data.email == authEmailLower())
+      );
+
+      allow create: if isClubAdmin(request.resource.data.clubId)
+        && request.resource.data.status == 'pending'
+        && isValidRole(request.resource.data.role);
+
+      allow update: if (
+        isClubAdmin(resource.data.clubId)
+        && request.resource.data.clubId == resource.data.clubId
+      ) || (
+        isSignedIn()
+        && authEmailLower() != ''
+        && resource.data.email == authEmailLower()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.claimedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedBy', 'claimedAt'])
+      );
+
+      allow delete: if isClubAdmin(resource.data.clubId);
+    }
+
+    // --- CLUB JOIN CODES (EXACT LOOKUP ONLY; NO GLOBAL LISTING) ---
+    match /joinCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if isClubAdmin(resource.data.clubId);
+      allow create: if isClubAdmin(request.resource.data.clubId);
+      allow update, delete: if isClubAdmin(resource.data.clubId);
+    }
+
+    // --- CLUB JOIN REQUESTS (APPROVAL QUEUE) ---
+    match /joinRequests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        isClubAdmin(resource.data.clubId)
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.joinCode is string
+        && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode))
+        && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.active == true
+        && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.clubId == request.resource.data.clubId;
+
+      allow update: if isClubAdmin(resource.data.clubId)
+        && request.resource.data.clubId == resource.data.clubId;
+
+      allow delete: if isClubAdmin(resource.data.clubId)
+        || (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
+    }
+
+    // --- CLUBS ---
     match /clubs/{clubId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null && (isAdmin() || !exists(/databases/$(database)/documents/clubs/$(clubId)));
+      allow get: if isSignedIn() && (
+        isClubMember(clubId) ||
+        !exists(/databases/$(database)/documents/clubs/$(clubId))
+      );
+      allow list: if isClubMember(clubId);
+      allow create: if isSignedIn() && !exists(/databases/$(database)/documents/clubs/$(clubId));
+      allow update: if isClubAdmin(clubId);
+      allow delete: if false;
     }
 
+    // --- TEAMS ---
     match /teams/{teamId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && (
-        isAdmin() ||
-        isClubMember(request.resource.data.clubId)
-      );
-      allow update, delete: if request.auth != null && (
-        isAdmin() ||
-        isAssignedTeam(teamId) ||
-        isAssignedTeam(resource.data.teamId)
-      );
+      allow read: if isClubMember(resource.data.clubId);
+      allow create: if isClubAdmin(request.resource.data.clubId)
+        || isClubLeadForAgeGroup(request.resource.data.clubId, request.resource.data.ageGroup);
+      allow update: if (
+        isClubAdmin(resource.data.clubId) ||
+        isClubLeadForAgeGroup(resource.data.clubId, resource.data.ageGroup)
+      ) && request.resource.data.clubId == resource.data.clubId;
+      allow delete: if isClubAdmin(resource.data.clubId);
     }
 
+    // --- PLAYERS ---
     match /players/{playerId} {
-      allow read: if request.auth != null && isClubMember(resource.data.clubId);
-      allow create: if request.auth != null && isClubMember(request.resource.data.clubId);
-      allow update, delete: if request.auth != null && isClubMember(resource.data.clubId);
+      allow read: if isClubMember(resource.data.clubId);
+      allow create: if isClubMember(request.resource.data.clubId) && userRole() != 'viewer';
+      allow update: if isClubMember(resource.data.clubId)
+        && request.resource.data.clubId == resource.data.clubId
+        && userRole() != 'viewer';
+      allow delete: if isClubMember(resource.data.clubId) && (
+        isClubAdmin(resource.data.clubId) ||
+        isClubLeadForAgeGroup(resource.data.clubId, resource.data.ageGroup) ||
+        (userRole() == 'coach' && isAssignedTeamId(resource.data.primaryTeamId))
+      );
     }
 
+    // --- MATCHES ---
     match /matches/{matchId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null && isAssignedTeam(request.resource.data.teamId);
-      allow update, delete: if request.auth != null && isAssignedTeam(resource.data.teamId);
+      allow read: if isActiveUser() && (
+        resource.data.clubId == userClubId() ||
+        isAssignedTeamId(resource.data.teamId)
+      );
+      allow create: if canEditTeam(request.resource.data.clubId, request.resource.data.teamId);
+      allow update: if canEditTeam(request.resource.data.clubId, request.resource.data.teamId)
+        && (!('clubId' in resource.data) || resource.data.clubId == request.resource.data.clubId);
+      allow delete: if isClubAdmin(resource.data.clubId);
     }
 
+    // --- LINEUPS ---
     match /lineups/{lineupId} {
-      allow read, write: if request.auth != null;
+      allow read: if isActiveUser() && (
+        resource.data.clubId == userClubId() ||
+        isAssignedTeamId(resource.data.teamId)
+      );
+      allow create: if canEditTeam(request.resource.data.clubId, request.resource.data.teamId);
+      allow update: if canEditTeam(request.resource.data.clubId, request.resource.data.teamId)
+        && (!('clubId' in resource.data) || resource.data.clubId == request.resource.data.clubId);
+      allow delete: if isClubAdmin(resource.data.clubId);
     }
   }
 }
