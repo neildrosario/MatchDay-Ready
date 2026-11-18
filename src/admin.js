@@ -81,6 +81,93 @@ export function renderAdminNavBadge() {
   if (openShortcut) {
     openShortcut.classList.toggle('hidden', !isAdmin);
   }
+  renderHeaderClubLogo();
+}
+
+export function renderHeaderClubLogo() {
+  const btn = document.getElementById('headerClubLogoBtn');
+  const img = document.getElementById('headerClubLogoImg');
+  const placeholder = document.getElementById('headerClubLogoPlaceholder');
+  if (!btn || !img || !placeholder) return;
+
+  const logoUrl = appState.club?.logoDataUrl || '';
+  const isAdmin = isClubAdmin(appState.userProfile);
+
+  if (logoUrl) {
+    btn.classList.remove('hidden');
+    img.src = logoUrl;
+    img.alt = `${appState.club?.shortName || 'Club'} Logo`;
+    img.classList.remove('hidden');
+    placeholder.classList.add('hidden');
+    btn.title = isAdmin
+      ? `${appState.club?.shortName || 'Club'} Logo (Tap to update in Admin)`
+      : `${appState.club?.shortName || 'Club'} Logo`;
+    btn.classList.toggle('cursor-pointer', isAdmin);
+    btn.classList.toggle('cursor-default', !isAdmin);
+  } else if (isAdmin) {
+    btn.classList.remove('hidden');
+    img.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    btn.title = 'Upload Club Logo';
+    btn.classList.add('cursor-pointer');
+    btn.classList.remove('cursor-default');
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+export function openClubLogoUpload() {
+  if (!isClubAdmin(appState.userProfile)) return;
+  activeAdminSection = 'overview';
+  if (typeof window.switchView === 'function') {
+    window.switchView('admin');
+  } else {
+    renderAdminDashboard();
+  }
+}
+
+/**
+ * Resizes an uploaded club crest/logo cleanly on a canvas (max 220x220px) so it syncs
+ * instantaneously in Firestore, works offline, and renders cleanly in Share Sheet exports.
+ */
+function resizeClubLogoFile(file, maxSize = 220) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      return reject(new Error('Please select an image file (PNG, JPG, WebP, or SVG).'));
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the selected image file.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Unsupported or corrupted image file.'));
+      img.onload = () => {
+        const w = img.naturalWidth || img.width || maxSize;
+        const h = img.naturalHeight || img.height || maxSize;
+        const scale = Math.min(1, maxSize / Math.max(w, h));
+        const targetW = Math.max(1, Math.round(w * scale));
+        const targetH = Math.max(1, Math.round(h * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, targetW, targetH);
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        // Preserve transparency with PNG if compact, otherwise compress smoothly
+        let dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl.length > 180000) {
+          const webpUrl = canvas.toDataURL('image/webp', 0.85);
+          dataUrl = webpUrl.startsWith('data:image/webp')
+            ? webpUrl
+            : canvas.toDataURL('image/jpeg', 0.85);
+        }
+        resolve(dataUrl);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 export function renderAdminDashboard() {
@@ -179,8 +266,40 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
     }
 
     <!-- Club Identity & Settings -->
-    <div class="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2.5 text-xs">
+    <div class="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-3 text-xs">
       <h4 class="font-bold text-emerald-400">🏟️ Club Profile &amp; Branding</h4>
+
+      <!-- Club Crest / Logo Upload -->
+      <div class="bg-slate-900/70 border border-slate-700 rounded-lg p-2.5 space-y-2">
+        <div class="flex items-center gap-3">
+          <div class="w-14 h-14 rounded-full border-2 ${
+            club.logoDataUrl ? 'border-emerald-400/80 bg-white/95' : 'border-dashed border-slate-600 bg-slate-800'
+          } p-1 shrink-0 flex items-center justify-center overflow-hidden shadow">
+            ${
+              club.logoDataUrl
+                ? `<img src="${escapeHtml(club.logoDataUrl)}" alt="Club Logo" class="w-full h-full object-contain rounded-full">`
+                : `<span class="text-xl text-slate-500">🛡️</span>`
+            }
+          </div>
+          <div class="flex-1 min-w-0 space-y-1">
+            <div class="font-bold text-white text-xs">Club Crest / Logo</div>
+            <p class="text-[10px] text-slate-400 leading-snug">Appears in the top-right corner of the app for all coaches and on exported Share Sheets.</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <label class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-center py-1.5 px-2.5 rounded font-bold text-[11px] cursor-pointer shadow">
+            <span>📤 ${club.logoDataUrl ? 'Change Club Logo' : 'Upload Club Logo'}</span>
+            <input id="adminClubLogoFileInput" type="file" accept="image/*" class="hidden">
+          </label>
+          ${
+            club.logoDataUrl
+              ? `<button id="adminRemoveClubLogoBtn" class="bg-slate-700 hover:bg-rose-600/80 text-slate-200 px-2.5 py-1.5 rounded font-semibold text-[11px]">Remove</button>`
+              : ''
+          }
+        </div>
+        <div id="adminClubLogoStatus" class="hidden text-[10px] text-emerald-300 font-semibold"></div>
+      </div>
+
       <div class="space-y-2">
         <div>
           <label class="block text-[10px] text-slate-400 mb-1">Full Club Name:</label>
@@ -222,6 +341,38 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
       </div>
     </div>
   `;
+
+  container.querySelector('#adminClubLogoFileInput')?.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const statusEl = container.querySelector('#adminClubLogoStatus');
+    if (statusEl) {
+      statusEl.innerText = 'Optimizing & uploading club logo...';
+      statusEl.classList.remove('hidden');
+    }
+    try {
+      const logoDataUrl = await resizeClubLogoFile(file, 220);
+      await updateClubSettings({ logoDataUrl });
+      renderHeaderClubLogo();
+      renderAdminDashboard();
+    } catch (err) {
+      alert(err.message || 'Could not upload club logo.');
+      if (statusEl) statusEl.classList.add('hidden');
+    } finally {
+      e.target.value = '';
+    }
+  });
+
+  container.querySelector('#adminRemoveClubLogoBtn')?.addEventListener('click', async () => {
+    if (!confirm('Remove the club logo from the header and exported team sheets?')) return;
+    try {
+      await updateClubSettings({ logoDataUrl: '' });
+      renderHeaderClubLogo();
+      renderAdminDashboard();
+    } catch (err) {
+      alert(err.message || 'Could not remove club logo.');
+    }
+  });
 
   container.querySelector('#adminSaveClubProfileBtn')?.addEventListener('click', async () => {
     const name = container.querySelector('#adminClubFullNameInput')?.value.trim();

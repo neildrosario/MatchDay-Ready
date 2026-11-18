@@ -2046,22 +2046,34 @@ export async function rejectJoinRequest(requestId) {
   }
 }
 
-export async function updateClubSettings({ name, shortName, joinCodeEnabled }) {
+export async function updateClubSettings({ name, shortName, joinCodeEnabled, logoDataUrl }) {
   const clubId = getActiveClubId();
   const patch = {};
   if (name !== undefined && name.trim()) patch.name = name.trim();
   if (shortName !== undefined && shortName.trim()) patch.shortName = shortName.trim();
   if (joinCodeEnabled !== undefined) patch.joinCodeEnabled = Boolean(joinCodeEnabled);
+  if (logoDataUrl !== undefined) {
+    if (typeof logoDataUrl === 'string' && logoDataUrl.length > 300000) {
+      throw new Error('Logo image is too large after compression. Please try a simpler image.');
+    }
+    patch.logoDataUrl = logoDataUrl || '';
+  }
   patch.updatedAt = new Date().toISOString();
+
+  // Optimistic local state update so header logo appears immediately
+  if (appState.club) {
+    appState.club = { ...appState.club, ...patch };
+    notifyAppState();
+  }
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
     await setDoc(doc(db, 'clubs', clubId), patch, { merge: true });
-    if (joinCodeEnabled !== undefined && appState.club?.joinCode) {
+    if ((joinCodeEnabled !== undefined || shortName !== undefined) && appState.club?.joinCode) {
       await setDoc(
         doc(db, 'joinCodes', normalizeJoinCode(appState.club.joinCode)),
         {
-          active: Boolean(joinCodeEnabled),
+          active: joinCodeEnabled !== undefined ? Boolean(joinCodeEnabled) : appState.club.joinCodeEnabled !== false,
           clubName: patch.shortName || appState.club.shortName || DEFAULT_CLUB_NAME,
           updatedAt: patch.updatedAt
         },

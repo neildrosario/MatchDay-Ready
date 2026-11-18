@@ -37,6 +37,18 @@ export async function exportTeamSheet() {
   const fmtEl = document.getElementById('exportFormationText');
   const grid = document.getElementById('exportGrid');
   const footerEl = document.getElementById('exportMatchFooter');
+  const clubLogoWrap = document.getElementById('exportClubLogoWrap');
+  const clubLogoImg = document.getElementById('exportClubLogoImg');
+
+  if (clubLogoWrap && clubLogoImg) {
+    const logoUrl = appState.club?.logoDataUrl || '';
+    if (logoUrl) {
+      clubLogoImg.src = logoUrl;
+      clubLogoWrap.classList.remove('hidden');
+    } else {
+      clubLogoWrap.classList.add('hidden');
+    }
+  }
 
   if (titleEl) titleEl.innerText = `${clubName} • ${team.name}${oppText}`;
   if (dateEl) {

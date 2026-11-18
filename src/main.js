@@ -79,6 +79,8 @@ import {
 import {
   renderAdminDashboard,
   renderAdminNavBadge,
+  renderHeaderClubLogo,
+  openClubLogoUpload,
   setAdminSubTab,
   setAdminMemberRoleFilter,
   setAdminMemberSearch
@@ -208,6 +210,8 @@ Object.assign(window, {
   dismissClaimedInviteNotice,
   renderAdminDashboard,
   renderAdminNavBadge,
+  renderHeaderClubLogo,
+  openClubLogoUpload,
   setAdminSubTab,
   setAdminMemberRoleFilter,
   setAdminMemberSearch
@@ -218,6 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAuthStatusBanner();
     renderAccessGate();
     renderAdminNavBadge();
+    renderHeaderClubLogo();
     renderPitch();
     renderMatchTimer();
     renderAdminCoachesPanel();
