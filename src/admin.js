@@ -71,10 +71,11 @@ export function renderAdminNavBadge() {
       const pendingCount = (appState.allClubJoinRequests || []).filter(
         r => r.status === 'pending'
       ).length;
-      navBtn.innerHTML =
+      const badge =
         pendingCount > 0
-          ? `🛡️ Admin <span class="ml-0.5 bg-amber-500 text-slate-950 text-[9px] font-extrabold px-1.5 py-0.2 rounded-full">${pendingCount}</span>`
-          : `🛡️ Admin`;
+          ? `<span class="absolute top-1 right-2 bg-amber-400 text-slate-950 text-[9px] font-extrabold leading-none px-1.5 py-0.5 rounded-full shadow">${pendingCount}</span>`
+          : '';
+      navBtn.innerHTML = `<span class="text-base leading-none">🛡️</span><span>Admin</span>${badge}`;
     }
   }
   if (openShortcut) {

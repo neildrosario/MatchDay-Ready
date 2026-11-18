@@ -17,3 +17,7 @@ select {
   appearance: none;
   text-align-last: center;
 }
+
+.bottom-nav-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

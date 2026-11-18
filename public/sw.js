@@ -1,4 +1,4 @@
-const CACHE_NAME = 'matchday-ready-pwa-v2';
+const CACHE_NAME = 'matchday-ready-pwa-v3';
 const PRECACHE_URLS = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', event => {

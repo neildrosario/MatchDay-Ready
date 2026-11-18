@@ -103,18 +103,30 @@ export function switchView(view) {
   const btnAdmin = document.getElementById('nav-admin');
 
   const activeClass =
-    'flex-1 py-2 text-center font-bold text-[11px] rounded bg-emerald-600 text-white shadow';
+    'flex-1 py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 font-bold text-[11px] bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 transition';
   const inactiveClass =
-    'flex-1 py-2 text-center font-bold text-[11px] rounded bg-slate-900 text-slate-400';
+    'flex-1 py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 font-semibold text-[11px] text-slate-400 hover:text-slate-200 border border-transparent transition';
   const adminActiveClass =
-    'flex-1 py-2 text-center font-bold text-[11px] rounded bg-purple-600 text-white shadow';
+    'relative flex-1 py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 font-bold text-[11px] bg-purple-600/25 text-purple-200 border border-purple-400/50 transition';
   const adminInactiveClass =
-    'flex-1 py-2 text-center font-bold text-[11px] rounded bg-slate-900 text-purple-300';
+    'relative flex-1 py-1.5 px-1 rounded-lg flex flex-col items-center justify-center gap-0.5 font-semibold text-[11px] text-purple-300/80 hover:text-purple-200 border border-transparent transition';
 
-  if (btnPitch) btnPitch.className = view === 'pitch' ? activeClass : inactiveClass;
-  if (btnSplitter) btnSplitter.className = view === 'splitter' ? activeClass : inactiveClass;
-  if (btnStats) btnStats.className = view === 'stats' ? activeClass : inactiveClass;
-  if (btnAdmin) btnAdmin.className = view === 'admin' ? adminActiveClass : adminInactiveClass;
+  if (btnPitch) {
+    btnPitch.className = view === 'pitch' ? activeClass : inactiveClass;
+    btnPitch.setAttribute('aria-current', view === 'pitch' ? 'page' : 'false');
+  }
+  if (btnSplitter) {
+    btnSplitter.className = view === 'splitter' ? activeClass : inactiveClass;
+    btnSplitter.setAttribute('aria-current', view === 'splitter' ? 'page' : 'false');
+  }
+  if (btnStats) {
+    btnStats.className = view === 'stats' ? activeClass : inactiveClass;
+    btnStats.setAttribute('aria-current', view === 'stats' ? 'page' : 'false');
+  }
+  if (btnAdmin) {
+    btnAdmin.className = view === 'admin' ? adminActiveClass : adminInactiveClass;
+    btnAdmin.setAttribute('aria-current', view === 'admin' ? 'page' : 'false');
+  }
   renderAdminNavBadge();
 
   if (view === 'pitch') {
@@ -126,6 +138,7 @@ export function switchView(view) {
   } else {
     renderStats();
   }
+  window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
 // Expose global UI actions for inline attributes or direct inspection
