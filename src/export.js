@@ -29,7 +29,7 @@ export async function exportTeamSheet() {
   const periodCount = periods.length;
   const unitLabel = getPeriodUnitLabel(periodCount);
   const dateStr = appState.selectedDate;
-  const clubName = appState.club?.shortName || 'Straffan AFC';
+  const clubName = appState.club?.shortName || appState.club?.name || 'Club';
   const oppText = match.opposition ? ` vs ${match.opposition}` : '';
 
   const titleEl = document.getElementById('exportTitleText');

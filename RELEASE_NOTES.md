@@ -153,5 +153,15 @@ flowchart LR
   * **4 Governance Sub-Tabs:**
     * **👥 Staff:** Approval Queue with inline role + team/age-group picker, Email Invite composer, Pending Invites list with 1-click WhatsApp copy/revoke, and searchable/filterable Club Members directory.
     * **🛡️ Teams:** Teams grouped by age group with player/staff counts, inline Edit Team (name, age group, format, periods, minutes), Create Team, and Delete Team.
-    * **🏟️ Club:** Live club KPIs (Teams, Players, Staff, Matches), Club Profile/Branding editor, and Join Code manager (custom code, rotate, pause/enable, WhatsApp link copy).
+    * **🏟️ Club:** Live club KPIs (Teams, Players, Staff, Matches), Club Profile/Branding editor with **Club Crest / Logo Upload** (rendered in the top-right app header and exported Share Sheets), and Join Code manager (custom code, rotate, pause/enable, WhatsApp link copy).
     * **🎓 Season:** Club-wide shared player overview and 1-click **End-of-Season Age-Group Rollover** (e.g. `U10` $\rightarrow$ `U11` across teams, players, and Age-Group Leads).
+
+---
+
+### Milestone 15: Multi-Club Self-Onboarding, Club Switcher & Club-Neutral Branding
+* **Files:** [firestore.rules](file:///home/neildrosario/MatchDay-Ready/firestore.rules), [src/db.js](file:///home/neildrosario/MatchDay-Ready/src/db.js), [src/auth.js](file:///home/neildrosario/MatchDay-Ready/src/auth.js), [src/main.js](file:///home/neildrosario/MatchDay-Ready/src/main.js), [index.html](file:///home/neildrosario/MatchDay-Ready/index.html)
+* **What Was Built:**
+  * **3-Path Self-Onboarding Hub (`#accessGateModal`):** Unattached users (and existing users opening the Club Hub) can **Accept an Email Invite**, **Join an Existing Club via Join Code**, or **Register a Brand-New Isolated Club** (auto-generating a unique `clubId`, club-namespaced first team, and active Club Join Code as founding Admin).
+  * **Multi-Club Memberships & Header Club Switcher:** Users belonging to 2+ clubs get a live **Header Club Switcher** (`#clubSwitcherSelect`) plus a **Your Clubs** panel in the Club Hub to switch clubs in 1 tap (dynamically updating club crest, name, role, teams, players, and matches).
+  * **Zero-Trust Multi-Club Firestore Rules:** Enforces `isValidClubSwitch`, `isValidNewClubAddition`, `isValidAdditionalInviteClaim`, and `isAdminUpdatingClubMembership` so users can switch between authorized clubs or register new isolated clubs without any possibility of role escalation or cross-club tampering.
+  * **Club-Neutral Sign-In & Dynamic Title:** Removed hardcoded Straffan AFC strings from the generic sign-in screen and browser title, dynamically branding the app to whichever club is active.

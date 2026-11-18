@@ -96,7 +96,7 @@ export function renderHeaderAndMatchBar() {
 
   const clubBadge = document.getElementById('clubTitleBadge');
   if (clubBadge && appState.club) {
-    clubBadge.innerText = appState.club.shortName || 'Straffan AFC';
+    clubBadge.innerText = appState.club.shortName || appState.club.name || 'Club';
   }
 
   const match = getCurrentMatchDoc();

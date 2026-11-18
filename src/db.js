@@ -402,7 +402,18 @@ function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@st
         status: 'active',
         clubId: DEFAULT_CLUB_ID,
         assignedTeamIds: ['u10_white', 'u10_green'],
-        assignedAgeGroups: ['U10']
+        assignedAgeGroups: ['U10'],
+        memberClubIds: [DEFAULT_CLUB_ID],
+        clubMemberships: {
+          [DEFAULT_CLUB_ID]: {
+            clubId: DEFAULT_CLUB_ID,
+            clubName: DEFAULT_CLUB_NAME,
+            role: 'admin',
+            status: 'active',
+            assignedTeamIds: ['u10_white', 'u10_green'],
+            assignedAgeGroups: ['U10']
+          }
+        }
       }
     },
     invites: {},
@@ -431,6 +442,7 @@ export const appState = {
   accessStatus: 'ready', // 'ready' | 'loading' | 'needs_onboarding' | 'pending_approval' | 'rejected' | 'suspended'
   pendingJoinRequest: null, // Active/rejected joinRequest for unattached user
   claimedInviteNotice: null, // Banner notice shown after auto-claiming an email invite
+  myPendingInvites: [], // Pending email invites addressed to the signed-in user across clubs (Milestone 15)
   currentUser: null, // Firebase auth user or local user profile
   userProfile: null, // Document from `users` collection
   club: null,
@@ -476,6 +488,79 @@ export function generateClubJoinCode(clubShortName = 'CLUB') {
   return `${prefix}-${suffix}`;
 }
 
+export function generateClubSlug(clubName = 'club') {
+  const base =
+    String(clubName || 'club')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 28) || 'club';
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  return `${base}_${suffix}`;
+}
+
+/**
+ * Returns the normalized list of clubs the signed-in user belongs to (Milestone 15).
+ * Gracefully handles legacy single-club user docs that don't yet have `clubMemberships`.
+ */
+export function getUserClubMemberships(profile = appState.userProfile) {
+  if (!profile) return [];
+  const map = profile.clubMemberships && typeof profile.clubMemberships === 'object'
+    ? { ...profile.clubMemberships }
+    : {};
+
+  if (profile.clubId && !map[profile.clubId]) {
+    map[profile.clubId] = {
+      clubId: profile.clubId,
+      clubName:
+        appState.club?.clubId === profile.clubId
+          ? appState.club.shortName || appState.club.name || profile.clubId
+          : profile.clubId,
+      role: normalizeRole(profile.role || 'viewer'),
+      status: profile.status || 'active',
+      assignedTeamIds: Array.isArray(profile.assignedTeamIds) ? profile.assignedTeamIds : [],
+      assignedAgeGroups: Array.isArray(profile.assignedAgeGroups) ? profile.assignedAgeGroups : []
+    };
+  }
+
+  if (appState.club?.clubId && map[appState.club.clubId]) {
+    map[appState.club.clubId] = {
+      ...map[appState.club.clubId],
+      clubName: appState.club.shortName || appState.club.name || map[appState.club.clubId].clubName
+    };
+  }
+
+  return Object.values(map).sort((a, b) =>
+    (a.clubName || a.clubId || '').localeCompare(b.clubName || b.clubId || '')
+  );
+}
+
+function buildSeededMembershipsForUser(existingProfile) {
+  const base =
+    existingProfile?.clubMemberships && typeof existingProfile.clubMemberships === 'object'
+      ? { ...existingProfile.clubMemberships }
+      : {};
+  if (existingProfile?.clubId && !base[existingProfile.clubId]) {
+    base[existingProfile.clubId] = {
+      clubId: existingProfile.clubId,
+      clubName:
+        appState.club?.clubId === existingProfile.clubId
+          ? appState.club.shortName || appState.club.name || existingProfile.clubId
+          : existingProfile.clubId,
+      role: normalizeRole(existingProfile.role || 'coach'),
+      status: existingProfile.status || 'active',
+      assignedTeamIds: Array.isArray(existingProfile.assignedTeamIds)
+        ? [...existingProfile.assignedTeamIds]
+        : [],
+      assignedAgeGroups: Array.isArray(existingProfile.assignedAgeGroups)
+        ? [...existingProfile.assignedAgeGroups]
+        : []
+    };
+  }
+  return base;
+}
+
 export function subscribeAppState(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -518,6 +603,7 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   appState.syncState = 'local';
   appState.accessStatus = 'ready';
   appState.pendingJoinRequest = null;
+  appState.myPendingInvites = [];
 
   const uid = appState.currentUser?.uid || 'local_coach_1';
   if (!store.users[uid]) {
@@ -529,31 +615,62 @@ export function hydrateAppStateFromLocalStore(storeInput) {
       status: 'active',
       clubId: DEFAULT_CLUB_ID,
       assignedTeamIds: ['u10_white', 'u10_green'],
-      assignedAgeGroups: ['U10']
+      assignedAgeGroups: ['U10'],
+      memberClubIds: [DEFAULT_CLUB_ID],
+      clubMemberships: {
+        [DEFAULT_CLUB_ID]: {
+          clubId: DEFAULT_CLUB_ID,
+          clubName: DEFAULT_CLUB_NAME,
+          role: 'admin',
+          status: 'active',
+          assignedTeamIds: ['u10_white', 'u10_green'],
+          assignedAgeGroups: ['U10']
+        }
+      }
     };
   }
+
   appState.userProfile = store.users[uid];
-  appState.club = store.clubs[DEFAULT_CLUB_ID] || {
-    clubId: DEFAULT_CLUB_ID,
+  const activeClubId = appState.userProfile.clubId || DEFAULT_CLUB_ID;
+
+  appState.club = store.clubs[activeClubId] || store.clubs[DEFAULT_CLUB_ID] || {
+    clubId: activeClubId,
     name: DEFAULT_CLUB_FULL_NAME,
     shortName: DEFAULT_CLUB_NAME,
     joinCode: 'STRAFFAN-2026',
     joinCodeEnabled: true
   };
-  appState.allClubTeams = Object.values(store.teams || {});
-  appState.allClubUsers = Object.values(store.users || {});
-  appState.allClubInvites = Object.values(store.invites || {});
-  appState.allClubJoinRequests = Object.values(store.joinRequests || {});
+
+  appState.allClubTeams = Object.values(store.teams || {}).filter(
+    t => (t.clubId || DEFAULT_CLUB_ID) === activeClubId
+  );
+  appState.allClubUsers = Object.values(store.users || {})
+    .filter(
+      u =>
+        (u.clubId || DEFAULT_CLUB_ID) === activeClubId ||
+        (Array.isArray(u.memberClubIds) && u.memberClubIds.includes(activeClubId))
+    )
+    .map(u => projectUserForClub(u, activeClubId));
+  appState.allClubInvites = Object.values(store.invites || {}).filter(
+    i => (i.clubId || DEFAULT_CLUB_ID) === activeClubId
+  );
+  appState.allClubJoinRequests = Object.values(store.joinRequests || {}).filter(
+    r => (r.clubId || DEFAULT_CLUB_ID) === activeClubId
+  );
   appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
 
   if (appState.teams.length > 0 && !appState.teams.some(t => t.teamId === appState.selectedTeamId)) {
     appState.selectedTeamId = appState.teams[0].teamId;
   }
 
-  appState.players = Object.values(store.players || {});
-  appState.allMatches = { ...(store.matches || {}) };
+  appState.players = Object.values(store.players || {}).filter(
+    p => (p.clubId || DEFAULT_CLUB_ID) === activeClubId
+  );
+  appState.allMatches = {};
   appState.matchesByTeam = {};
   Object.values(store.matches || {}).forEach(m => {
+    if ((m.clubId || DEFAULT_CLUB_ID) !== activeClubId) return;
+    appState.allMatches[m.matchId] = m;
     if (m.teamId === appState.selectedTeamId) {
       appState.matchesByTeam[m.matchId] = m;
     }
@@ -562,6 +679,7 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   appState.lineupsByMatch = {};
   appState.sameDateLineupsAllTeams = [];
   Object.values(store.lineups || {}).forEach(l => {
+    if ((l.clubId || DEFAULT_CLUB_ID) !== activeClubId) return;
     if (!appState.lineupsByMatch[l.matchId]) {
       appState.lineupsByMatch[l.matchId] = {};
     }
@@ -572,6 +690,20 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   });
 
   notifyAppState();
+}
+
+function projectUserForClub(userDoc, clubId) {
+  if (!userDoc) return userDoc;
+  if (userDoc.clubId === clubId) return userDoc;
+  const m = userDoc.clubMemberships?.[clubId];
+  if (!m) return userDoc;
+  return {
+    ...userDoc,
+    role: m.role || userDoc.role,
+    status: m.status || 'active',
+    assignedTeamIds: Array.isArray(m.assignedTeamIds) ? m.assignedTeamIds : [],
+    assignedAgeGroups: Array.isArray(m.assignedAgeGroups) ? m.assignedAgeGroups : []
+  };
 }
 
 // --- CLOUD FIRESTORE SEEDING, INVITE CLAIMING & SUBSCRIPTIONS (Milestone 13) ---
@@ -725,15 +857,29 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
 
       if (pendingInvites.length > 0) {
         const inv = pendingInvites[0];
+        const claimedRole = normalizeRole(inv.role || 'coach');
+        const claimedTeams = Array.isArray(inv.assignedTeamIds) ? inv.assignedTeamIds : [];
+        const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? inv.assignedAgeGroups : [];
         const newProfile = {
           uid: firebaseUser.uid,
           email: cleanEmail,
           displayName: firebaseUser.displayName || inv.displayName || cleanEmail.split('@')[0],
-          role: normalizeRole(inv.role || 'coach'),
+          role: claimedRole,
           status: 'active',
           clubId: inv.clubId,
-          assignedTeamIds: Array.isArray(inv.assignedTeamIds) ? inv.assignedTeamIds : [],
-          assignedAgeGroups: Array.isArray(inv.assignedAgeGroups) ? inv.assignedAgeGroups : [],
+          assignedTeamIds: claimedTeams,
+          assignedAgeGroups: claimedGroups,
+          memberClubIds: [inv.clubId],
+          clubMemberships: {
+            [inv.clubId]: {
+              clubId: inv.clubId,
+              clubName: inv.clubName || inv.clubId,
+              role: claimedRole,
+              status: 'active',
+              assignedTeamIds: claimedTeams,
+              assignedAgeGroups: claimedGroups
+            }
+          },
           claimedInviteId: inv.inviteId,
           createdAt: new Date().toISOString()
         };
@@ -993,6 +1139,7 @@ export function startFirestoreSubscriptions(firebaseUser) {
         return;
       }
       const profile = snap.data();
+      const prevClubId = clubId;
       appState.userProfile = profile;
 
       if (!isProfileActive(profile)) {
@@ -1001,6 +1148,13 @@ export function startFirestoreSubscriptions(firebaseUser) {
         appState.accessStatus = 'suspended';
         notifyAppState();
         startAccessGateWatcher(firebaseUser);
+        return;
+      }
+
+      // If active club switched (e.g. from another tab or Club Switcher), restart club-scoped listeners
+      if (profile.clubId && profile.clubId !== prevClubId) {
+        resetClubRuntimeData();
+        startFirestoreSubscriptions(firebaseUser);
         return;
       }
 
@@ -1020,14 +1174,58 @@ export function startFirestoreSubscriptions(firebaseUser) {
     })
   );
 
-  // 3. Subscribe to Club Users (club-scoped)
+  // 2B. Watch pending email invites addressed to THIS signed-in user across ANY club (Milestone 15)
+  const myEmailLower = (firebaseUser.email || '').trim().toLowerCase();
+  if (myEmailLower) {
+    activeUnsubscribes.push(
+      onSnapshot(
+        query(collection(db, 'invites'), where('email', '==', myEmailLower)),
+        snap => {
+          appState.myPendingInvites = snap.docs
+            .map(d => ({ inviteId: d.id, ...d.data() }))
+            .filter(inv => inv.status === 'pending');
+          notifyAppState();
+        },
+        err => console.warn('My pending invites listener note:', err)
+      )
+    );
+  }
+
+  // 3. Subscribe to Club Users (active in clubId OR multi-club members of clubId)
+  let primaryClubUsersMap = {};
+  let multiClubUsersMap = {};
+  const emitMergedClubUsers = () => {
+    const merged = { ...multiClubUsersMap, ...primaryClubUsersMap };
+    appState.allClubUsers = Object.values(merged).map(u => projectUserForClub(u, clubId));
+    notifyAppState();
+  };
+
   activeUnsubscribes.push(
     onSnapshot(
       query(collection(db, 'users'), where('clubId', '==', clubId)),
       snap => {
-        appState.allClubUsers = snap.docs.map(d => d.data());
-        notifyAppState();
+        primaryClubUsersMap = {};
+        snap.docs.forEach(d => {
+          const data = d.data();
+          primaryClubUsersMap[data.uid || d.id] = data;
+        });
+        emitMergedClubUsers();
       }
+    )
+  );
+
+  activeUnsubscribes.push(
+    onSnapshot(
+      query(collection(db, 'users'), where('memberClubIds', 'array-contains', clubId)),
+      snap => {
+        multiClubUsersMap = {};
+        snap.docs.forEach(d => {
+          const data = d.data();
+          multiClubUsersMap[data.uid || d.id] = data;
+        });
+        emitMergedClubUsers();
+      },
+      err => console.warn('Multi-club users listener note:', err)
     )
   );
 
@@ -1126,10 +1324,12 @@ function filterAccessibleTeams() {
 export function getSelectedTeam() {
   return (
     appState.teams.find(t => t.teamId === appState.selectedTeamId) ||
-    appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) || {
-      teamId: 'u10_white',
-      clubId: DEFAULT_CLUB_ID,
-      name: 'U10 White',
+    appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) ||
+    appState.teams[0] ||
+    appState.allClubTeams[0] || {
+      teamId: appState.selectedTeamId || 'u10_white',
+      clubId: getActiveClubId(),
+      name: 'Squad',
       ageGroup: 'U10',
       defaultFormation: '7v7',
       defaultQtrMins: 12
@@ -1718,6 +1918,63 @@ export async function revokeClubInvite(inviteId) {
   }
 }
 
+async function writeClubMemberPatch(uid, memberFieldsPatch) {
+  const clubId = getActiveClubId();
+  const clubName = appState.club?.shortName || appState.club?.name || clubId;
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user) return;
+  const now = new Date().toISOString();
+
+  const existingMemberships = buildSeededMembershipsForUser(user);
+  const prevClubEntry = existingMemberships[clubId] || {
+    clubId,
+    clubName,
+    role: normalizeRole(user.role || 'coach'),
+    status: user.status || 'active',
+    assignedTeamIds: Array.isArray(user.assignedTeamIds) ? [...user.assignedTeamIds] : [],
+    assignedAgeGroups: Array.isArray(user.assignedAgeGroups) ? [...user.assignedAgeGroups] : []
+  };
+  const nextClubEntry = {
+    ...prevClubEntry,
+    ...memberFieldsPatch,
+    clubId,
+    clubName
+  };
+  const nextMemberships = {
+    ...existingMemberships,
+    [clubId]: nextClubEntry
+  };
+  const nextMemberClubIds = Array.from(
+    new Set([...(user.memberClubIds || []), ...Object.keys(nextMemberships)])
+  );
+
+  // If this club is the user's currently active club, update top-level fields + clubMemberships
+  const isUsersActiveClub = (user.clubId || clubId) === clubId;
+  const fullPatch = isUsersActiveClub
+    ? {
+        ...memberFieldsPatch,
+        clubMemberships: nextMemberships,
+        memberClubIds: nextMemberClubIds,
+        updatedAt: now
+      }
+    : {
+        clubMemberships: nextMemberships,
+        memberClubIds: nextMemberClubIds,
+        updatedAt: now
+      };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', uid), fullPatch, { merge: true });
+  } else {
+    const store = loadLocalStore();
+    if (store.users[uid]) {
+      store.users[uid] = { ...store.users[uid], ...fullPatch };
+      saveLocalStore(store);
+    }
+  }
+}
+
 export async function updateCoachRole(uid, newRole) {
   const user = appState.allClubUsers.find(u => u.uid === uid);
   if (!user) return;
@@ -1727,10 +1984,7 @@ export async function updateCoachRole(uid, newRole) {
   }
 
   const safeRole = normalizeRole(newRole);
-  const patch = {
-    role: safeRole,
-    updatedAt: new Date().toISOString()
-  };
+  const patch = { role: safeRole };
   // If promoting to Age-Group Lead and no age groups set yet, seed from their assigned teams
   if (safeRole === 'lead' && (!user.assignedAgeGroups || user.assignedAgeGroups.length === 0)) {
     const teamGroups = appState.allClubTeams
@@ -1742,16 +1996,7 @@ export async function updateCoachRole(uid, newRole) {
     }
   }
 
-  if (appState.mode === 'firebase') {
-    const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), patch, { merge: true });
-  } else {
-    const store = loadLocalStore();
-    if (store.users[uid]) {
-      store.users[uid] = { ...store.users[uid], ...patch };
-      saveLocalStore(store);
-    }
-  }
+  await writeClubMemberPatch(uid, patch);
 }
 
 export async function toggleCoachTeamAssignment(uid, teamId) {
@@ -1763,18 +2008,7 @@ export async function toggleCoachTeamAssignment(uid, teamId) {
   } else {
     current.add(teamId);
   }
-  const assignedTeamIds = Array.from(current);
-
-  if (appState.mode === 'firebase') {
-    const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), { assignedTeamIds, updatedAt: new Date().toISOString() }, { merge: true });
-  } else {
-    const store = loadLocalStore();
-    if (store.users[uid]) {
-      store.users[uid].assignedTeamIds = assignedTeamIds;
-      saveLocalStore(store);
-    }
-  }
+  await writeClubMemberPatch(uid, { assignedTeamIds: Array.from(current) });
 }
 
 export async function toggleCoachAgeGroupAssignment(uid, ageGroup) {
@@ -1786,18 +2020,7 @@ export async function toggleCoachAgeGroupAssignment(uid, ageGroup) {
   } else {
     current.add(ageGroup);
   }
-  const assignedAgeGroups = Array.from(current);
-
-  if (appState.mode === 'firebase') {
-    const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), { assignedAgeGroups, updatedAt: new Date().toISOString() }, { merge: true });
-  } else {
-    const store = loadLocalStore();
-    if (store.users[uid]) {
-      store.users[uid].assignedAgeGroups = assignedAgeGroups;
-      saveLocalStore(store);
-    }
-  }
+  await writeClubMemberPatch(uid, { assignedAgeGroups: Array.from(current) });
 }
 
 export async function toggleCoachStatus(uid) {
@@ -1809,17 +2032,7 @@ export async function toggleCoachStatus(uid) {
     if (!check.ok) throw new Error(check.reason);
   }
   const nextStatus = currentlyActive ? 'suspended' : 'active';
-
-  if (appState.mode === 'firebase') {
-    const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', uid), { status: nextStatus, updatedAt: new Date().toISOString() }, { merge: true });
-  } else {
-    const store = loadLocalStore();
-    if (store.users[uid]) {
-      store.users[uid].status = nextStatus;
-      saveLocalStore(store);
-    }
-  }
+  await writeClubMemberPatch(uid, { status: nextStatus });
   return nextStatus;
 }
 
@@ -1983,6 +2196,17 @@ export async function approveJoinRequest({
       ? Array.from(new Set(assignedAgeGroups.filter(Boolean)))
       : [];
 
+  const clubName = appState.club?.shortName || appState.club?.name || clubId;
+  const dedupedTeams = Array.from(new Set(finalTeams));
+  const membershipEntry = {
+    clubId,
+    clubName,
+    role: safeRole,
+    status: 'active',
+    assignedTeamIds: dedupedTeams,
+    assignedAgeGroups: finalAgeGroups
+  };
+
   const newUserDoc = {
     uid: req.uid,
     email: req.email,
@@ -1990,8 +2214,12 @@ export async function approveJoinRequest({
     role: safeRole,
     status: 'active',
     clubId,
-    assignedTeamIds: Array.from(new Set(finalTeams)),
+    assignedTeamIds: dedupedTeams,
     assignedAgeGroups: finalAgeGroups,
+    memberClubIds: [clubId],
+    clubMemberships: {
+      [clubId]: membershipEntry
+    },
     approvedBy: appState.userProfile?.uid || 'local_coach_1',
     createdAt: now,
     updatedAt: now
@@ -1999,7 +2227,34 @@ export async function approveJoinRequest({
 
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
-    await setDoc(doc(db, 'users', req.uid), newUserDoc, { merge: true });
+    let existingUser = null;
+    try {
+      const existingSnap = await getDoc(doc(db, 'users', req.uid));
+      if (existingSnap.exists()) existingUser = existingSnap.data();
+    } catch (_) {}
+
+    if (existingUser && existingUser.clubId && existingUser.clubId !== clubId) {
+      // Multi-club user already active in another club -> add ONLY this club's membership entry
+      const mergedMemberships = {
+        ...buildSeededMembershipsForUser(existingUser),
+        [clubId]: membershipEntry
+      };
+      const mergedClubIds = Array.from(
+        new Set([...(existingUser.memberClubIds || [existingUser.clubId]), clubId])
+      );
+      await setDoc(
+        doc(db, 'users', req.uid),
+        {
+          clubMemberships: mergedMemberships,
+          memberClubIds: mergedClubIds,
+          updatedAt: now
+        },
+        { merge: true }
+      );
+    } else {
+      await setDoc(doc(db, 'users', req.uid), newUserDoc, { merge: true });
+    }
+
     await setDoc(
       doc(db, 'joinRequests', requestId),
       {
@@ -2043,6 +2298,296 @@ export async function rejectJoinRequest(requestId) {
       store.joinRequests[requestId].reviewedAt = now;
     }
     saveLocalStore(store);
+  }
+}
+
+// --- MILESTONE 15: MULTI-CLUB SELF-ONBOARDING & CLUB SWITCHER ---
+
+/**
+ * Registers a brand-new isolated club and makes the signed-in user its founding Club Admin.
+ * Works both for brand-new unattached users AND existing users adding a second club!
+ */
+export async function registerNewClub({
+  clubName,
+  shortName = '',
+  firstTeamName = 'U10 White',
+  ageGroup = 'U10',
+  defaultFormation = '7v7',
+  defaultPeriods = 4,
+  defaultQtrMins = 12
+}) {
+  const cleanFull = (clubName || '').trim();
+  if (!cleanFull || cleanFull.length < 2) {
+    throw new Error('Please enter a Club Name (e.g. Maynooth Town FC).');
+  }
+  const cleanShort = (shortName || '').trim() || cleanFull;
+  const cleanTeam = (firstTeamName || '').trim() || `${ageGroup || 'U10'} Squad`;
+  const cleanAge = (ageGroup || 'U10').trim();
+  const clubId = generateClubSlug(cleanShort);
+  const teamSlug = cleanTeam.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'squad';
+  const teamId = `${clubId}__${teamSlug}`;
+  const joinCode = generateClubJoinCode(cleanShort);
+  const now = new Date().toISOString();
+
+  const uid = appState.currentUser?.uid || appState.userProfile?.uid || 'local_coach_1';
+  const email = (appState.currentUser?.email || appState.userProfile?.email || 'admin@club.ie').trim().toLowerCase();
+  const displayName = (appState.currentUser?.displayName || appState.userProfile?.displayName || email.split('@')[0] || 'Club Admin').trim();
+
+  const newMembership = {
+    clubId,
+    clubName: cleanShort,
+    role: 'admin',
+    status: 'active',
+    assignedTeamIds: [teamId],
+    assignedAgeGroups: [cleanAge]
+  };
+
+  const clubDoc = {
+    clubId,
+    name: cleanFull,
+    shortName: cleanShort,
+    joinCode,
+    joinCodeEnabled: true,
+    joinDefaultRole: 'coach',
+    createdBy: uid,
+    createdAt: now
+  };
+
+  const joinCodeDoc = {
+    code: joinCode,
+    clubId,
+    clubName: cleanShort,
+    active: true,
+    defaultRole: 'coach',
+    updatedAt: now,
+    updatedBy: uid
+  };
+
+  const teamDoc = {
+    teamId,
+    clubId,
+    name: cleanTeam,
+    ageGroup: cleanAge,
+    defaultFormation: defaultFormation || '7v7',
+    defaultPeriods: Number(defaultPeriods) || 4,
+    defaultQtrMins: parseFloat(defaultQtrMins) || 12,
+    coachIds: [uid]
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    const userRef = doc(db, 'users', uid);
+    const existingSnap = await getDoc(userRef);
+
+    // 1. Create or update users/{uid} FIRST while clubs/{clubId} does not exist yet (validates security rule)
+    if (existingSnap.exists()) {
+      const existing = existingSnap.data();
+      const mergedMemberships = {
+        ...buildSeededMembershipsForUser(existing),
+        [clubId]: newMembership
+      };
+      const mergedClubIds = Array.from(
+        new Set([...(existing.memberClubIds || [existing.clubId]), clubId])
+      );
+      await setDoc(
+        userRef,
+        {
+          clubId,
+          role: 'admin',
+          status: 'active',
+          assignedTeamIds: [teamId],
+          assignedAgeGroups: [cleanAge],
+          clubMemberships: mergedMemberships,
+          memberClubIds: mergedClubIds,
+          updatedAt: now
+        },
+        { merge: true }
+      );
+      appState.userProfile = {
+        ...existing,
+        clubId,
+        role: 'admin',
+        status: 'active',
+        assignedTeamIds: [teamId],
+        assignedAgeGroups: [cleanAge],
+        clubMemberships: mergedMemberships,
+        memberClubIds: mergedClubIds
+      };
+    } else {
+      const freshProfile = {
+        uid,
+        email,
+        displayName,
+        role: 'admin',
+        status: 'active',
+        clubId,
+        assignedTeamIds: [teamId],
+        assignedAgeGroups: [cleanAge],
+        memberClubIds: [clubId],
+        clubMemberships: {
+          [clubId]: newMembership
+        },
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(userRef, freshProfile);
+      appState.userProfile = freshProfile;
+    }
+
+    // 2. Create club, joinCode, and first team
+    await setDoc(doc(db, 'clubs', clubId), { ...clubDoc, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'joinCodes', joinCode), joinCodeDoc);
+    await setDoc(doc(db, 'teams', teamId), teamDoc);
+
+    clearAccessGateSubscriptions();
+    resetClubRuntimeData();
+    appState.selectedTeamId = teamId;
+    localStorage.setItem('matchday_selected_team_v3', teamId);
+    appState.accessStatus = 'ready';
+    appState.pendingJoinRequest = null;
+    appState.claimedInviteNotice = `🏟️ Welcome to ${cleanShort}! Your club Join Code is ${joinCode}.`;
+    startFirestoreSubscriptions(appState.currentUser);
+  } else {
+    const store = loadLocalStore();
+    if (!store.clubs) store.clubs = {};
+    if (!store.joinCodes) store.joinCodes = {};
+    if (!store.teams) store.teams = {};
+    store.clubs[clubId] = clubDoc;
+    store.joinCodes[joinCode] = joinCodeDoc;
+    store.teams[teamId] = teamDoc;
+
+    const existing = store.users[uid] || {};
+    const mergedMemberships = {
+      ...buildSeededMembershipsForUser(existing),
+      [clubId]: newMembership
+    };
+    store.users[uid] = {
+      ...existing,
+      uid,
+      email,
+      displayName,
+      clubId,
+      role: 'admin',
+      status: 'active',
+      assignedTeamIds: [teamId],
+      assignedAgeGroups: [cleanAge],
+      clubMemberships: mergedMemberships,
+      memberClubIds: Array.from(new Set([...(existing.memberClubIds || [DEFAULT_CLUB_ID]), clubId]))
+    };
+    appState.selectedTeamId = teamId;
+    saveLocalStore(store);
+  }
+
+  return { club: clubDoc, team: teamDoc, joinCode };
+}
+
+/**
+ * Switches an authenticated multi-club user's active club cleanly.
+ */
+export async function switchActiveClub(targetClubId) {
+  if (!targetClubId || !appState.userProfile) return;
+  if (appState.userProfile.clubId === targetClubId) return;
+
+  const memberships = appState.userProfile.clubMemberships || {};
+  const target = memberships[targetClubId];
+  if (!target) {
+    throw new Error('You do not have an active membership for that club.');
+  }
+  if (target.status && target.status !== 'active') {
+    throw new Error('Your access to that club is currently suspended.');
+  }
+
+  const switchPatch = {
+    clubId: targetClubId,
+    role: normalizeRole(target.role || 'viewer'),
+    status: target.status || 'active',
+    assignedTeamIds: Array.isArray(target.assignedTeamIds) ? [...target.assignedTeamIds] : [],
+    assignedAgeGroups: Array.isArray(target.assignedAgeGroups) ? [...target.assignedAgeGroups] : [],
+    updatedAt: new Date().toISOString()
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await updateDoc(doc(db, 'users', appState.userProfile.uid), switchPatch);
+    appState.userProfile = { ...appState.userProfile, ...switchPatch };
+    resetClubRuntimeData();
+    if (switchPatch.assignedTeamIds.length > 0) {
+      appState.selectedTeamId = switchPatch.assignedTeamIds[0];
+      localStorage.setItem('matchday_selected_team_v3', appState.selectedTeamId);
+    }
+    startFirestoreSubscriptions(appState.currentUser);
+  } else {
+    const store = loadLocalStore();
+    const uid = appState.userProfile.uid;
+    if (store.users[uid]) {
+      store.users[uid] = { ...store.users[uid], ...switchPatch };
+      if (switchPatch.assignedTeamIds.length > 0) {
+        appState.selectedTeamId = switchPatch.assignedTeamIds[0];
+      }
+      saveLocalStore(store);
+    }
+  }
+}
+
+/**
+ * Allows an already-signed-in user (who belongs to Club A) to accept a pending email invite to Club B.
+ */
+export async function claimAdditionalInvite(inviteId) {
+  const inv = (appState.myPendingInvites || []).find(i => i.inviteId === inviteId);
+  if (!inv) throw new Error('Pending invite not found.');
+  if (!appState.currentUser || !appState.userProfile) {
+    throw new Error('Sign in first to accept an invite.');
+  }
+
+  const now = new Date().toISOString();
+  const claimedRole = normalizeRole(inv.role || 'coach');
+  const claimedTeams = Array.isArray(inv.assignedTeamIds) ? [...inv.assignedTeamIds] : [];
+  const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? [...inv.assignedAgeGroups] : [];
+  const newEntry = {
+    clubId: inv.clubId,
+    clubName: inv.clubName || inv.clubId,
+    role: claimedRole,
+    status: 'active',
+    assignedTeamIds: claimedTeams,
+    assignedAgeGroups: claimedGroups
+  };
+
+  const mergedMemberships = {
+    ...buildSeededMembershipsForUser(appState.userProfile),
+    [inv.clubId]: newEntry
+  };
+  const mergedClubIds = Array.from(
+    new Set([...(appState.userProfile.memberClubIds || [appState.userProfile.clubId]), inv.clubId])
+  );
+
+  const patch = {
+    clubId: inv.clubId,
+    role: claimedRole,
+    status: 'active',
+    assignedTeamIds: claimedTeams,
+    assignedAgeGroups: claimedGroups,
+    claimedInviteId: inv.inviteId,
+    clubMemberships: mergedMemberships,
+    memberClubIds: mergedClubIds,
+    updatedAt: now
+  };
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'users', appState.userProfile.uid), patch, { merge: true });
+    try {
+      await updateDoc(doc(db, 'invites', inv.inviteId), {
+        status: 'accepted',
+        claimedBy: appState.userProfile.uid,
+        claimedAt: now
+      });
+    } catch (err) {
+      console.warn('Could not mark additional invite accepted:', err);
+    }
+    appState.userProfile = { ...appState.userProfile, ...patch };
+    appState.claimedInviteNotice = `✅ Joined ${inv.clubName || inv.clubId} as ${claimedRole.toUpperCase()}! Use the Club Switcher in the header anytime.`;
+    resetClubRuntimeData();
+    startFirestoreSubscriptions(appState.currentUser);
   }
 }
 

@@ -241,7 +241,7 @@ export async function handlePublishSquadSplit() {
 export async function copySquadSplitWhatsApp() {
   const { ageGroup, teams, players } = getAgeGroupContext();
   const draft = ensureDraftInitialized();
-  const clubName = appState.club?.shortName || 'Straffan AFC';
+  const clubName = appState.club?.shortName || appState.club?.name || 'Club';
 
   const lines = [`⚽ *${clubName} ${ageGroup} — Matchday Squads (${appState.selectedDate})*`, ''];
   teams.forEach(t => {

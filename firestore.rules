@@ -94,11 +94,119 @@ service cloud.firestore {
         && newUser.assignedAgeGroups == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.assignedAgeGroups;
     }
 
+    // Multi-club: switching active club using an already-authorized membership entry
+    function isValidClubSwitch(userId) {
+      let nextClub = request.resource.data.clubId;
+      return request.auth.uid == userId
+        && 'clubMemberships' in resource.data
+        && nextClub in resource.data.clubMemberships
+        && request.resource.data.clubMemberships == resource.data.clubMemberships
+        && request.resource.data.role == resource.data.clubMemberships[nextClub].role
+        && request.resource.data.status == resource.data.clubMemberships[nextClub].status
+        && request.resource.data.assignedTeamIds == resource.data.clubMemberships[nextClub].assignedTeamIds
+        && request.resource.data.assignedAgeGroups == resource.data.clubMemberships[nextClub].assignedAgeGroups
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['clubId', 'role', 'status', 'assignedTeamIds', 'assignedAgeGroups', 'updatedAt']);
+    }
+
+    // Multi-club: existing user registering a brand-new club that does not exist yet
+    function isValidNewClubAddition(userId) {
+      let nextClub = request.resource.data.clubId;
+      return request.auth.uid == userId
+        && nextClub is string
+        && nextClub != resource.data.clubId
+        && !exists(/databases/$(database)/documents/clubs/$(nextClub))
+        && request.resource.data.role == 'admin'
+        && request.resource.data.status == 'active'
+        && 'clubMemberships' in request.resource.data
+        && nextClub in request.resource.data.clubMemberships
+        && request.resource.data.clubMemberships[nextClub].clubId == nextClub
+        && request.resource.data.clubMemberships[nextClub].role == 'admin'
+        && request.resource.data.clubMemberships[nextClub].status == 'active'
+        && (
+          (
+            'clubMemberships' in resource.data
+            && request.resource.data.clubMemberships.diff(resource.data.clubMemberships).affectedKeys().hasOnly([nextClub])
+          ) || (
+            !('clubMemberships' in resource.data)
+            && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, nextClub])
+            && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
+            && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
+            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == resource.data.assignedTeamIds
+          )
+        );
+    }
+
+    // Multi-club: existing user claiming a pending invite to an additional club
+    function isValidAdditionalInviteClaim(userId) {
+      let invId = request.resource.data.claimedInviteId;
+      let inv = get(/databases/$(database)/documents/invites/$(invId)).data;
+      let nextClub = inv.clubId;
+      return request.auth.uid == userId
+        && invId is string
+        && exists(/databases/$(database)/documents/invites/$(invId))
+        && inv.status == 'pending'
+        && authEmailLower() != ''
+        && inv.email == authEmailLower()
+        && request.resource.data.clubId == nextClub
+        && request.resource.data.role == inv.role
+        && request.resource.data.status == 'active'
+        && request.resource.data.assignedTeamIds == inv.assignedTeamIds
+        && request.resource.data.assignedAgeGroups == inv.assignedAgeGroups
+        && 'clubMemberships' in request.resource.data
+        && nextClub in request.resource.data.clubMemberships
+        && request.resource.data.clubMemberships[nextClub].clubId == nextClub
+        && request.resource.data.clubMemberships[nextClub].role == inv.role
+        && request.resource.data.clubMemberships[nextClub].status == 'active'
+        && request.resource.data.clubMemberships[nextClub].assignedTeamIds == inv.assignedTeamIds
+        && request.resource.data.clubMemberships[nextClub].assignedAgeGroups == inv.assignedAgeGroups
+        && (
+          (
+            'clubMemberships' in resource.data
+            && request.resource.data.clubMemberships.diff(resource.data.clubMemberships).affectedKeys().hasOnly([nextClub])
+          ) || (
+            !('clubMemberships' in resource.data)
+            && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, nextClub])
+            && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
+            && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
+            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == resource.data.assignedTeamIds
+          )
+        );
+    }
+
+    // Multi-club: Admin of clubA updating a multi-club member's clubA membership (or approving joinRequest)
+    function isAdminUpdatingClubMembership(userId) {
+      let targetClub = userClubId();
+      let hasPendingReq = exists(/databases/$(database)/documents/joinRequests/$(targetClub + '__' + userId))
+        && get(/databases/$(database)/documents/joinRequests/$(targetClub + '__' + userId)).data.status == 'pending';
+      let isExistingClubMember = 'memberClubIds' in resource.data
+        && resource.data.memberClubIds is list
+        && targetClub in resource.data.memberClubIds;
+      return isClubAdmin(targetClub)
+        && (hasPendingReq || isExistingClubMember)
+        && request.resource.data.clubId == resource.data.clubId
+        && request.resource.data.role == resource.data.role
+        && 'clubMemberships' in request.resource.data
+        && targetClub in request.resource.data.clubMemberships
+        && (
+          (
+            'clubMemberships' in resource.data
+            && request.resource.data.clubMemberships.diff(resource.data.clubMemberships).affectedKeys().hasOnly([targetClub])
+          ) || (
+            !('clubMemberships' in resource.data)
+            && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, targetClub])
+            && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
+            && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
+          )
+        );
+    }
+
     // --- USERS (COACHES, AGE-GROUP LEADS, VIEWERS & CLUB ADMINS) ---
     match /users/{userId} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId ||
-        isClubMember(resource.data.clubId)
+        isClubMember(resource.data.clubId) ||
+        ('memberClubIds' in resource.data && resource.data.memberClubIds is list && userClubId() in resource.data.memberClubIds)
       );
 
       allow create: if isSignedIn()
@@ -109,22 +217,33 @@ service cloud.firestore {
           isClubAdmin(request.resource.data.clubId)
           // 2. Invited user claiming their exact pre-authorized invite
           || (request.auth.uid == userId && isValidInviteClaim(request.resource.data))
-          // 3. First-time bootstrap of a brand-new club that does not exist yet
+          // 3. Founding Admin bootstrapping a brand-new club that does not exist yet
           || (
             request.auth.uid == userId
             && request.resource.data.role == 'admin'
+            && request.resource.data.status == 'active'
             && request.resource.data.clubId is string
             && !exists(/databases/$(database)/documents/clubs/$(request.resource.data.clubId))
           )
         );
 
       allow update: if isSignedIn() && (
+        // 1. Club Admin updating a member currently active in their club
         (
           isClubAdmin(resource.data.clubId)
           && request.resource.data.clubId == resource.data.clubId
           && isValidRole(request.resource.data.role)
-        ) || (
-          // Non-admin self-updates restricted strictly to safe profile fields
+        )
+        // 2. Club Admin updating/approving a multi-club member's entry for their club
+        || isAdminUpdatingClubMembership(userId)
+        // 3. Multi-club user switching between their already-authorized clubs
+        || isValidClubSwitch(userId)
+        // 4. Existing user registering a brand-new isolated club
+        || isValidNewClubAddition(userId)
+        // 5. Existing user claiming an invite to an additional club
+        || isValidAdditionalInviteClaim(userId)
+        // 6. Non-admin self-updates restricted strictly to safe profile fields
+        || (
           request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastSeenAt'])
         )

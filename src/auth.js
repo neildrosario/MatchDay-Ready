@@ -20,12 +20,18 @@ import {
   hydrateAppStateFromLocalStore,
   submitJoinCodeRequest,
   cancelPendingJoinRequest,
+  registerNewClub,
+  switchActiveClub,
+  claimAdditionalInvite,
+  getUserClubMemberships,
   normalizeJoinCode,
   notifyAppState
 } from './db.js';
 import { getRoleMeta, isViewer } from './permissions.js';
 
 let authMode = 'login'; // 'login' | 'signup'
+let clubHubOpenManually = false;
+let onboardingTab = 'join'; // 'join' | 'create'
 
 function getJoinCodeFromUrl() {
   try {
@@ -221,12 +227,146 @@ export function handleDisconnectFirebaseUI() {
   window.location.reload();
 }
 
-// --- MILESTONE 13: ACCESS GATE (JOIN CODE & APPROVAL QUEUE) ---
+// --- MILESTONE 13 & 15: MULTI-CLUB ACCESS GATE, SELF-ONBOARDING & CLUB SWITCHER ---
+
+export function openClubHubModal(defaultTab = 'join') {
+  clubHubOpenManually = true;
+  onboardingTab = defaultTab;
+  hideAuthModal();
+  renderAccessGate();
+}
+
+export function closeClubHubModal() {
+  clubHubOpenManually = false;
+  renderAccessGate();
+}
+
+export function toggleOnboardingTab(tab) {
+  onboardingTab = tab === 'create' ? 'create' : 'join';
+  renderAccessGate();
+}
+
+export function renderClubSwitcher() {
+  const badgeBtn = document.getElementById('clubTitleBadge');
+  const switcherSel = document.getElementById('clubSwitcherSelect');
+  const activeClubName = appState.club?.shortName || appState.club?.name || 'MatchDay Ready';
+  const memberships = getUserClubMemberships(appState.userProfile);
+
+  // Dynamically brand the browser tab title with the active club
+  document.title = appState.club?.shortName
+    ? `MatchDay Ready — ${appState.club.shortName}`
+    : 'MatchDay Ready — Club Football Manager';
+
+  if (memberships.length > 1 && switcherSel && badgeBtn) {
+    badgeBtn.classList.add('hidden');
+    switcherSel.classList.remove('hidden');
+    switcherSel.innerHTML = memberships
+      .map(m => {
+        const selected = m.clubId === appState.userProfile?.clubId ? 'selected' : '';
+        const meta = getRoleMeta(m.role);
+        return `<option value="${m.clubId}" ${selected}>🏟️ ${m.clubName || m.clubId} (${meta.short})</option>`;
+      })
+      .join('');
+  } else if (badgeBtn && switcherSel) {
+    switcherSel.classList.add('hidden');
+    badgeBtn.classList.remove('hidden');
+    badgeBtn.innerText = activeClubName;
+  }
+}
+
+export async function handleSwitchClubUI(targetClubId) {
+  if (!targetClubId || targetClubId === appState.userProfile?.clubId) return;
+  try {
+    await switchActiveClub(targetClubId);
+    clubHubOpenManually = false;
+    renderAccessGate();
+    renderClubSwitcher();
+  } catch (e) {
+    alert(e.message || 'Could not switch club.');
+    renderClubSwitcher();
+  }
+}
+
+export async function handleClaimAdditionalInviteUI(inviteId) {
+  if (!inviteId) return;
+  try {
+    await claimAdditionalInvite(inviteId);
+    clubHubOpenManually = false;
+    renderAccessGate();
+    renderClubSwitcher();
+  } catch (e) {
+    alert(e.message || 'Could not accept club invite.');
+  }
+}
+
+export async function handleRegisterNewClubUI(event) {
+  if (event) event.preventDefault();
+  const clubName = document.getElementById('newClubFullNameInput')?.value.trim() || '';
+  const shortName = document.getElementById('newClubShortNameInput')?.value.trim() || '';
+  const firstTeamName = document.getElementById('newClubFirstTeamInput')?.value.trim() || 'U10 White';
+  const ageGroup = document.getElementById('newClubAgeGroupInput')?.value.trim() || 'U10';
+  const defaultFormation = document.getElementById('newClubFormatSelect')?.value || '7v7';
+  const defaultPeriods = Number(document.getElementById('newClubPeriodsSelect')?.value) || 4;
+  const errEl = document.getElementById('accessGateCreateError');
+  const submitBtn = document.getElementById('accessGateCreateBtn');
+
+  if (errEl) errEl.classList.add('hidden');
+  if (!clubName || clubName.length < 2) {
+    if (errEl) {
+      errEl.innerText = 'Please enter your club name (e.g. Maynooth Town FC).';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Creating Club Workspace...';
+  }
+
+  try {
+    const res = await registerNewClub({
+      clubName,
+      shortName: shortName || clubName,
+      firstTeamName,
+      ageGroup,
+      defaultFormation,
+      defaultPeriods,
+      defaultQtrMins: 12
+    });
+    clubHubOpenManually = false;
+    renderAccessGate();
+    renderClubSwitcher();
+    alert(
+      `🏟️ Created "${res.club.shortName}"!\n\nYour Club Join Code is: ${res.joinCode}\nShare it from 🛡️ Admin → 🏟️ Club to onboard your coaches.`
+    );
+  } catch (e) {
+    if (errEl) {
+      errEl.innerText = e.message || 'Could not create club.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = '🚀 Create Club & Start Coaching';
+    }
+  }
+}
 
 export function renderAccessGate() {
+  renderClubSwitcher();
+
   const gateModal = document.getElementById('accessGateModal');
+  const closeBtn = document.getElementById('accessGateCloseBtn');
   const emailBadge = document.getElementById('accessGateEmail');
+  const myClubsSection = document.getElementById('accessGateMyClubsSection');
+  const myClubsList = document.getElementById('accessGateMyClubsList');
+  const pendingInvitesBox = document.getElementById('accessGatePendingInvitesBox');
   const formPanel = document.getElementById('accessGateJoinFormPanel');
+  const joinTabPanel = document.getElementById('onboardingPanelJoin');
+  const createTabPanel = document.getElementById('onboardingPanelCreate');
+  const joinTabBtn = document.getElementById('onboardingTabJoin');
+  const createTabBtn = document.getElementById('onboardingTabCreate');
   const pendingPanel = document.getElementById('accessGatePendingPanel');
   const pendingClubName = document.getElementById('accessGatePendingClub');
   const pendingCodeText = document.getElementById('accessGatePendingCode');
@@ -236,18 +376,24 @@ export function renderAccessGate() {
   const nameInput = document.getElementById('accessGateNameInput');
 
   const status = appState.accessStatus;
-  const shouldShowGate =
+  const isBlockedGate =
     appState.mode === 'firebase' &&
     Boolean(appState.currentUser) &&
     ['needs_onboarding', 'pending_approval', 'rejected', 'suspended'].includes(status);
+
+  const shouldShowGate = isBlockedGate || clubHubOpenManually;
 
   if (gateModal) {
     gateModal.classList.toggle('hidden', !shouldShowGate);
   }
 
+  if (closeBtn) {
+    closeBtn.classList.toggle('hidden', isBlockedGate);
+  }
+
   if (shouldShowGate) {
     if (emailBadge) {
-      emailBadge.innerText = appState.currentUser?.email || appState.currentUser?.displayName || 'Signed in';
+      emailBadge.innerText = appState.currentUser?.email || appState.currentUser?.displayName || 'Local Mode';
     }
     if (nameInput && !nameInput.value && appState.currentUser?.displayName) {
       nameInput.value = appState.currentUser.displayName;
@@ -257,18 +403,99 @@ export function renderAccessGate() {
       codeInput.value = urlCode;
     }
 
-    const isPending = status === 'pending_approval';
-    const isRejected = status === 'rejected';
-    const isSuspended = status === 'suspended';
+    // Show user's existing clubs when opened manually as Club Hub
+    const memberships = getUserClubMemberships(appState.userProfile);
+    if (myClubsSection && myClubsList) {
+      const showMyClubs = !isBlockedGate && memberships.length > 0;
+      myClubsSection.classList.toggle('hidden', !showMyClubs);
+      if (showMyClubs) {
+        myClubsList.innerHTML = memberships
+          .map(m => {
+            const isCurrent = m.clubId === appState.userProfile?.clubId;
+            const meta = getRoleMeta(m.role);
+            return `
+              <div class="flex items-center justify-between gap-2 bg-slate-900/80 px-2.5 py-2 rounded border ${
+                isCurrent ? 'border-emerald-500/60' : 'border-slate-700'
+              }">
+                <div class="min-w-0">
+                  <div class="font-bold text-white text-xs truncate">🏟️ ${m.clubName || m.clubId}</div>
+                  <div class="text-[10px] text-slate-400">${meta.icon} ${meta.label}</div>
+                </div>
+                ${
+                  isCurrent
+                    ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold shrink-0">Active</span>`
+                    : `<button onclick="handleSwitchClubUI('${m.clubId}')" class="bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shrink-0">Switch</button>`
+                }
+              </div>
+            `;
+          })
+          .join('');
+      }
+    }
+
+    // Show pending email invites inside the hub if any exist
+    if (pendingInvitesBox) {
+      const myInvites = appState.myPendingInvites || [];
+      pendingInvitesBox.classList.toggle('hidden', myInvites.length === 0);
+      if (myInvites.length > 0) {
+        pendingInvitesBox.innerHTML = myInvites
+          .map(
+            inv => `
+            <div class="flex items-center justify-between gap-2 bg-emerald-950/50 border border-emerald-500/40 rounded-lg p-2 text-xs">
+              <div class="min-w-0">
+                <div class="font-bold text-emerald-300 truncate">✉️ Invite: ${inv.clubName || inv.clubId}</div>
+                <div class="text-[10px] text-slate-300">Role: ${getRoleMeta(inv.role).label}</div>
+              </div>
+              <button onclick="handleClaimAdditionalInviteUI('${inv.inviteId}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept</button>
+            </div>`
+          )
+          .join('');
+      }
+    }
+
+    const isPending = isBlockedGate && status === 'pending_approval';
+    const isRejected = isBlockedGate && status === 'rejected';
+    const isSuspended = isBlockedGate && status === 'suspended';
 
     if (formPanel) formPanel.classList.toggle('hidden', isPending || isSuspended);
     if (pendingPanel) pendingPanel.classList.toggle('hidden', !isPending);
     if (rejectedBanner) rejectedBanner.classList.toggle('hidden', !isRejected);
     if (suspendedPanel) suspendedPanel.classList.toggle('hidden', !isSuspended);
 
+    // Toggle Join vs Create New Club sub-panels
+    if (joinTabPanel) joinTabPanel.classList.toggle('hidden', onboardingTab !== 'join');
+    if (createTabPanel) createTabPanel.classList.toggle('hidden', onboardingTab !== 'create');
+    if (joinTabBtn) {
+      joinTabBtn.className =
+        onboardingTab === 'join'
+          ? 'flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white shadow'
+          : 'flex-1 py-1.5 rounded font-semibold text-xs text-slate-400';
+    }
+    if (createTabBtn) {
+      createTabBtn.className =
+        onboardingTab === 'create'
+          ? 'flex-1 py-1.5 rounded font-bold text-xs bg-indigo-600 text-white shadow'
+          : 'flex-1 py-1.5 rounded font-semibold text-xs text-slate-400';
+    }
+
     if (isPending && appState.pendingJoinRequest) {
       if (pendingClubName) pendingClubName.innerText = appState.pendingJoinRequest.clubName || 'your club';
       if (pendingCodeText) pendingCodeText.innerText = appState.pendingJoinRequest.joinCode || '';
+    }
+  }
+
+  // Additional club invite banner (shown on main app if another club invites an existing user)
+  const addInvBanner = document.getElementById('additionalInviteBanner');
+  const addInvContent = document.getElementById('additionalInviteContent');
+  if (addInvBanner && addInvContent) {
+    const myInvites = appState.accessStatus === 'ready' ? appState.myPendingInvites || [] : [];
+    addInvBanner.classList.toggle('hidden', myInvites.length === 0);
+    if (myInvites.length > 0) {
+      const inv = myInvites[0];
+      addInvContent.innerHTML = `
+        <span class="truncate">✉️ You've been invited to <strong>${inv.clubName || inv.clubId}</strong> (${getRoleMeta(inv.role).label})</span>
+        <button onclick="handleClaimAdditionalInviteUI('${inv.inviteId}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept &amp; Join</button>
+      `;
     }
   }
 

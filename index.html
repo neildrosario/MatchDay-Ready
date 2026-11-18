@@ -9,7 +9,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/jpeg" href="/matchdayready-logo.jpeg">
   <link rel="apple-touch-icon" href="/matchdayready-logo.jpeg">
-  <title>MatchDay Ready — Club Edition (Straffan AFC)</title>
+  <title>MatchDay Ready — Club Football Manager</title>
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-24 font-sans">
 
@@ -24,7 +24,8 @@
         <div class="min-w-0">
           <div class="font-bold text-emerald-400 text-base leading-tight truncate">MatchDay Ready</div>
           <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-            <span id="clubTitleBadge" class="text-[10px] bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded font-semibold">Straffan AFC</span>
+            <button id="clubTitleBadge" type="button" onclick="openClubHubModal()" title="Switch, join, or register another club" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded font-semibold transition">MatchDay Ready</button>
+            <select id="clubSwitcherSelect" onchange="handleSwitchClubUI(this.value)" title="Switch Active Club" class="hidden text-[10px] bg-slate-900 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/40 max-w-[165px] truncate"></select>
             <span id="syncStatus" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Local Mode</span>
           </div>
         </div>
@@ -78,7 +79,11 @@
   <!-- Main Content Container -->
   <main class="max-w-md mx-auto p-3">
 
-    <!-- MILESTONE 13: ACCESS / ROLE STATUS BANNERS -->
+    <!-- MILESTONE 13 & 15: ACCESS / ROLE / MULTI-CLUB STATUS BANNERS -->
+    <div id="additionalInviteBanner" class="hidden bg-emerald-950/70 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200">
+      <div id="additionalInviteContent" class="flex items-center justify-between gap-2"></div>
+    </div>
+
     <div id="claimedInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200 flex items-center justify-between gap-2">
       <span id="claimedInviteText" class="font-semibold"></span>
       <button onclick="dismissClaimedInviteNotice()" class="text-emerald-300 hover:text-white font-bold px-1">✕</button>
@@ -135,6 +140,13 @@
         <div id="settingsOpenAdminBtn" class="hidden pt-2 border-t border-slate-700/70">
           <button onclick="switchView('admin')" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5">
             🛡️ Open Club Admin Dashboard (Coaches, Teams, Invites &amp; Join Code)
+          </button>
+        </div>
+
+        <!-- Multi-Club Hub: Switch / Join / Register New Club (Milestone 15) -->
+        <div class="pt-2 border-t border-slate-700/70">
+          <button onclick="openClubHubModal('create')" class="w-full bg-indigo-600/80 hover:bg-indigo-500 py-1.5 rounded-lg font-bold text-[11px] shadow">
+            🏟️ Switch Club / Join or Register a New Club
           </button>
         </div>
 
@@ -580,8 +592,8 @@
           <div class="w-10 h-10 rounded-full border-2 border-emerald-400/80 shadow shrink-0 bg-emerald-950"
                style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
           <div>
-            <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">Straffan AFC</span>
-            <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In (Straffan AFC)</h3>
+            <span class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">MatchDay Ready • Club Edition</span>
+            <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In</h3>
           </div>
         </div>
         <button onclick="hideAuthModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
@@ -602,7 +614,7 @@
         </div>
         <div>
           <label class="block text-slate-400 mb-1">Email Address:</label>
-          <input type="email" id="authEmailInput" placeholder="coach@straffanafc.ie" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          <input type="email" id="authEmailInput" placeholder="coach@yourclub.ie" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
         </div>
         <div>
           <label class="block text-slate-400 mb-1">Password:</label>
@@ -617,9 +629,13 @@
         <span>G</span> Continue with Google
       </button>
 
+      <button onclick="openClubHubModal('join')" class="w-full bg-slate-700 hover:bg-slate-600 text-emerald-300 py-1.5 rounded-lg font-bold text-[11px] mb-3 border border-slate-600">
+        🏟️ Switch Club / Join or Register a Club
+      </button>
+
       <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
-        <button onclick="useLocalSandboxCoach(&quot;Neil D'Rosario&quot;)" class="text-emerald-400 underline font-semibold">
-          Continue in Local Club Mode
+        <button onclick="useLocalSandboxCoach(&quot;Demo Coach&quot;)" class="text-emerald-400 underline font-semibold">
+          Continue in Local Sandbox
         </button>
         <button onclick="handleLogout()" class="text-rose-400 underline">
           Sign Out
@@ -628,22 +644,34 @@
     </div>
   </div>
 
-  <!-- MILESTONE 13: CLUB ACCESS GATE / JOIN CODE & APPROVAL QUEUE MODAL -->
-  <div id="accessGateModal" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl space-y-4">
-      <div class="flex items-center gap-3 border-b border-slate-700 pb-3">
-        <div class="w-10 h-10 rounded-full border-2 border-emerald-400/80 shadow shrink-0 bg-emerald-950"
-             style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
-        <div class="min-w-0">
-          <div class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">MatchDay Ready • Club Access</div>
-          <h3 class="font-bold text-sm text-white">Join Your Football Club</h3>
-          <div id="accessGateEmail" class="text-[10px] text-slate-400 truncate"></div>
+  <!-- MILESTONE 13 & 15: MULTI-CLUB HUB / 3-PATH ONBOARDING & ACCESS GATE MODAL -->
+  <div id="accessGateModal" class="fixed inset-0 bg-slate-950/95 z-50 flex items-center justify-center p-4 hidden overflow-y-auto">
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl space-y-4 my-auto">
+      <div class="flex items-center justify-between gap-2 border-b border-slate-700 pb-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-full border-2 border-emerald-400/80 shadow shrink-0 bg-emerald-950"
+               style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"></div>
+          <div class="min-w-0">
+            <div class="text-[10px] uppercase tracking-wider font-bold text-emerald-400">MatchDay Ready • Club Hub</div>
+            <h3 class="font-bold text-sm text-white">Join or Create Your Club</h3>
+            <div id="accessGateEmail" class="text-[10px] text-slate-400 truncate"></div>
+          </div>
         </div>
+        <button id="accessGateCloseBtn" onclick="closeClubHubModal()" class="hidden text-slate-400 hover:text-white font-bold px-1.5 py-0.5">✕</button>
       </div>
+
+      <!-- Existing Clubs Switcher (shown when opened manually by an active member) -->
+      <div id="accessGateMyClubsSection" class="hidden space-y-1.5">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Your Clubs</div>
+        <div id="accessGateMyClubsList" class="space-y-1.5 max-h-36 overflow-y-auto"></div>
+      </div>
+
+      <!-- Pending Email Invites for this user -->
+      <div id="accessGatePendingInvitesBox" class="hidden space-y-1.5"></div>
 
       <!-- Rejected Request Notice -->
       <div id="accessGateRejectedBanner" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs p-2.5 rounded">
-        Your previous join request was declined by the Club Admin. Double-check your club join code or contact your Club Admin directly.
+        Your previous join request was declined by the Club Admin. Double-check your join code, contact your Club Admin, or register your own club below.
       </div>
 
       <!-- Suspended Account Panel -->
@@ -666,39 +694,100 @@
           This screen unlocks automatically the moment your Club Admin approves your account — no need to refresh.
         </p>
         <button onclick="handleCancelJoinRequestUI()" class="w-full bg-slate-700 hover:bg-slate-600 py-1.5 rounded font-semibold text-[11px] text-slate-200">
-          Cancel Request &amp; Enter Different Code
+          Cancel Request &amp; Choose Another Option
         </button>
       </div>
 
-      <!-- Join Code Request Form Panel -->
+      <!-- Dual-Tab Onboarding: Join Existing Club OR Register New Club -->
       <div id="accessGateJoinFormPanel" class="space-y-3">
-        <p class="text-xs text-slate-300 leading-relaxed">
-          Your email is not pre-authorized for a club yet. Ask your Club Admin for an <strong>Email Invite</strong> or enter your <strong>Club Join Code</strong> below:
-        </p>
+        <div class="bg-slate-900 p-1 rounded-lg flex gap-1 border border-slate-700">
+          <button id="onboardingTabJoin" type="button" onclick="toggleOnboardingTab('join')" class="flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white shadow">🔑 Join Club</button>
+          <button id="onboardingTabCreate" type="button" onclick="toggleOnboardingTab('create')" class="flex-1 py-1.5 rounded font-semibold text-xs text-slate-400">🏟️ Register New Club</button>
+        </div>
 
-        <div id="accessGateError" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded"></div>
+        <!-- Tab 1: Join via Club Code or Re-Check Email Invite -->
+        <div id="onboardingPanelJoin" class="space-y-2.5">
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Enter a <strong>Club Join Code</strong> from your Club Admin, or check for a pending <strong>Email Invite</strong>:
+          </p>
 
-        <form onsubmit="handleSubmitJoinCodeUI(event)" class="space-y-2.5 text-xs">
-          <div>
-            <label class="block text-slate-400 mb-1 font-semibold">Club Join Code:</label>
-            <input type="text" id="accessGateJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-white font-mono uppercase tracking-wider font-bold">
-          </div>
-          <div>
-            <label class="block text-slate-400 mb-1">Your Name:</label>
-            <input type="text" id="accessGateNameInput" placeholder="e.g. Alex Murphy" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-          </div>
-          <div>
-            <label class="block text-slate-400 mb-1">Team / Role Note (Optional):</label>
-            <input type="text" id="accessGateNoteInput" placeholder="e.g. U10 Green assistant coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-          </div>
-          <button type="submit" id="accessGateSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
-            🔑 Request Club Access
+          <div id="accessGateError" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded"></div>
+
+          <form onsubmit="handleSubmitJoinCodeUI(event)" class="space-y-2 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-semibold">Club Join Code:</label>
+              <input type="text" id="accessGateJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-white font-mono uppercase tracking-wider font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Your Name:</label>
+              <input type="text" id="accessGateNameInput" placeholder="e.g. Alex Murphy" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Team / Role Note (Optional):</label>
+              <input type="text" id="accessGateNoteInput" placeholder="e.g. U10 Green assistant coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+            </div>
+            <button type="submit" id="accessGateSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
+              🔑 Request Club Access
+            </button>
+          </form>
+
+          <button onclick="handleRecheckAccessUI()" class="w-full bg-slate-700/80 hover:bg-slate-600 py-1.5 rounded-lg font-semibold text-[11px] text-slate-200">
+            🔄 Re-Check for Pending Email Invite
           </button>
-        </form>
+        </div>
 
-        <button onclick="handleRecheckAccessUI()" class="w-full bg-slate-700/80 hover:bg-slate-600 py-1.5 rounded-lg font-semibold text-[11px] text-slate-200">
-          🔄 Re-Check for Pending Email Invite
-        </button>
+        <!-- Tab 2: Register a Brand-New Club (Self-Onboarding) -->
+        <div id="onboardingPanelCreate" class="hidden space-y-2.5">
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            Set up an isolated workspace for your club. You'll start as <strong>Club Admin</strong> with your own Club Join Code.
+          </p>
+
+          <div id="accessGateCreateError" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded"></div>
+
+          <form onsubmit="handleRegisterNewClubUI(event)" class="space-y-2 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-semibold">Club Name:</label>
+              <input type="text" id="newClubFullNameInput" placeholder="e.g. Maynooth Town FC" class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-white font-semibold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Short Header Name (Optional):</label>
+              <input type="text" id="newClubShortNameInput" placeholder="e.g. Maynooth Town" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <div class="col-span-2">
+                <label class="block text-slate-400 mb-1">First Team Name:</label>
+                <input type="text" id="newClubFirstTeamInput" value="U10 White" placeholder="e.g. U10 White" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">Age Group:</label>
+                <input type="text" id="newClubAgeGroupInput" value="U10" placeholder="U10" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white text-center font-semibold">
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <div>
+                <label class="block text-slate-400 mb-1">Default Format:</label>
+                <select id="newClubFormatSelect" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white font-semibold">
+                  <option value="5v5">5 v 5</option>
+                  <option value="6v6">6 v 6</option>
+                  <option value="7v7" selected>7 v 7</option>
+                  <option value="9v9">9 v 9</option>
+                  <option value="11v11">11 v 11</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">Match Periods:</label>
+                <select id="newClubPeriodsSelect" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white font-semibold">
+                  <option value="4" selected>4 Quarters</option>
+                  <option value="3">3 Thirds</option>
+                  <option value="2">2 Halves</option>
+                </select>
+              </div>
+            </div>
+            <button type="submit" id="accessGateCreateBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 py-2 rounded-lg font-bold text-xs shadow">
+              🚀 Create Club &amp; Start Coaching
+            </button>
+          </form>
+        </div>
       </div>
 
       <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
