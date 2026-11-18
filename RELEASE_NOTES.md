@@ -131,5 +131,27 @@ flowchart LR
 ### Milestone 12: Live Sideline Match Events & Highlights (Goals, Assists, Saves & Effort Stars)
 * **Files:** [src/pitch.js](file:///home/neildrosario/MatchDay-Ready/src/pitch.js), [src/stats.js](file:///home/neildrosario/MatchDay-Ready/src/stats.js), [src/export.js](file:///home/neildrosario/MatchDay-Ready/src/export.js), [index.html](file:///home/neildrosario/MatchDay-Ready/index.html)
 * **What Was Built:**
-  * **1-Tap Sideline Event Logger (`⚽ + Event`):** Log **⚽ Goals** (with optional **👟 Assist**), **🧤 Great Saves**, **🌟 Effort / POTM Stars**, and **📝 Coach Tactical Notes**, automatically stamped with the active period and live timer minute (`Q2 06'`).
-  * **Stats & Team Sheet Integration:** Displays `⚽`, `👟`, and `🌟` badges next to players in **📊 Squad & Stats** (per match and full season) and prints period highlights directly on the exported **📸 Share Sheet** PNG.
+  * **1-Tap Sideline Event Logger (`⚽ + Event`):** Log **⚽ Goals** (with optional **👟 Assist**), **🧤 Great Saves**, **🌟 Effort / POTM Stars**, **🟨 Yellow / 🟥 Red Cards**, and **📝 Coach Tactical Notes**, automatically stamped with the active period and live timer minute (`Q2 06'`).
+  * **Stats & Team Sheet Integration:** Displays `⚽`, `👟`, `🌟`, `🟨`, and `🟥` badges next to players in **📊 Squad & Stats** (per match and full season) and prints period highlights directly on the exported **📸 Share Sheet** PNG.
+
+---
+
+### Milestone 13: Access Control Hardening, 4-Role RBAC & Invites + Join Code Approval Gate
+* **Files:** [firestore.rules](file:///home/neildrosario/MatchDay-Ready/firestore.rules), [firestore.indexes.json](file:///home/neildrosario/MatchDay-Ready/firestore.indexes.json), [src/permissions.js](file:///home/neildrosario/MatchDay-Ready/src/permissions.js), [src/db.js](file:///home/neildrosario/MatchDay-Ready/src/db.js), [src/auth.js](file:///home/neildrosario/MatchDay-Ready/src/auth.js), [src/pitch.js](file:///home/neildrosario/MatchDay-Ready/src/pitch.js), [src/splitter.js](file:///home/neildrosario/MatchDay-Ready/src/splitter.js), [src/stats.js](file:///home/neildrosario/MatchDay-Ready/src/stats.js), [ROADMAP.md](file:///home/neildrosario/MatchDay-Ready/ROADMAP.md)
+* **What Was Built:**
+  * **4-Role RBAC Hierarchy:** `admin` (Club Admin), `lead` (Age-Group Lead with `assignedAgeGroups` scope), `coach` (Team Coach), and `viewer` (strict Read-Only Viewer enforced in both Firestore rules and UI).
+  * **Zero Auto-Admin Fallback & Hardened Multi-Tenant Rules:** Removed silent admin creation for uninvited signups, locked `users/{uid}` against self-privilege escalation, enforced club-scoped `isClubAdmin(clubId)`, stamped `clubId` onto all `matches` & `lineups` (with safe automatic backfill for existing Straffan AFC docs), and scoped all Firestore real-time listeners by `clubId`.
+  * **Dual Onboarding (Email Invites + Club Join Code Approval Queue):** Added dedicated `invites`, `joinCodes`, and `joinRequests` collections. Invited emails auto-activate on login with exact Admin-assigned permissions; uninvited coaches enter a Club Join Code (`?code=...` supported) and wait on a real-time Access Gate that unlocks live once approved.
+  * **Last-Admin Safeguard & Member Suspension:** Prevents demoting/deleting the club's final active admin and supports pausing/reactivating member access.
+
+---
+
+### Milestone 14: Dedicated Club Admin Dashboard (`🛡️ Admin` Tab)
+* **Files:** [src/admin.js](file:///home/neildrosario/MatchDay-Ready/src/admin.js), [src/db.js](file:///home/neildrosario/MatchDay-Ready/src/db.js), [src/main.js](file:///home/neildrosario/MatchDay-Ready/src/main.js), [index.html](file:///home/neildrosario/MatchDay-Ready/index.html)
+* **What Was Built:**
+  * **Dedicated Admin-Only Top-Level Tab (`🛡️ Admin`):** Hidden from non-admins, with a live pending join-request count badge.
+  * **4 Governance Sub-Tabs:**
+    * **👥 Staff:** Approval Queue with inline role + team/age-group picker, Email Invite composer, Pending Invites list with 1-click WhatsApp copy/revoke, and searchable/filterable Club Members directory.
+    * **🛡️ Teams:** Teams grouped by age group with player/staff counts, inline Edit Team (name, age group, format, periods, minutes), Create Team, and Delete Team.
+    * **🏟️ Club:** Live club KPIs (Teams, Players, Staff, Matches), Club Profile/Branding editor, and Join Code manager (custom code, rotate, pause/enable, WhatsApp link copy).
+    * **🎓 Season:** Club-wide shared player overview and 1-click **End-of-Season Age-Group Rollover** (e.g. `U10` $\rightarrow$ `U11` across teams, players, and Age-Group Leads).

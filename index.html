@@ -115,67 +115,11 @@
           </div>
         </div>
 
-        <!-- Milestone 13: Club Admin Access Control (4 Roles, Email Invites, Join Code & Approval Queue) -->
-        <div id="adminCoachesSection" class="hidden pt-2 border-t border-slate-700/70 space-y-2.5">
-          <p class="text-[11px] text-emerald-400 font-bold">🛡️ Club Admin: Coaches, Invites &amp; Join Code</p>
-
-          <!-- Club Join Code Card -->
-          <div class="bg-slate-900/70 p-2 rounded border border-slate-700 space-y-1.5">
-            <div class="flex items-center justify-between gap-2">
-              <div>
-                <p class="text-[10px] font-bold text-slate-300">🔑 Club Join Code (with Approval Queue):</p>
-                <p class="text-[9px] text-slate-400">Coaches who enter this code appear below for your approval.</p>
-              </div>
-              <span id="adminJoinCodeDisplay" class="font-mono font-extrabold text-xs text-emerald-300 bg-slate-950 px-2 py-1 rounded border border-emerald-500/40">STRAFFAN-2026</span>
-            </div>
-            <div class="flex gap-1.5">
-              <button onclick="handleCopyJoinCodeUI()" class="flex-1 bg-emerald-600/80 hover:bg-emerald-500 py-1 rounded font-bold text-[10px]">📋 Copy WhatsApp Link</button>
-              <button onclick="handleRotateJoinCodeUI()" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded font-semibold text-[10px]">🔄 Rotate</button>
-              <button id="adminJoinCodeToggleBtn" onclick="handleToggleJoinCodeActiveUI()" class="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded font-semibold text-[10px]">Disable</button>
-            </div>
-          </div>
-
-          <!-- Pending Join Requests Queue -->
-          <div class="space-y-1">
-            <p class="text-[10px] font-bold uppercase tracking-wider text-amber-400">⏳ Pending Join-Code Requests</p>
-            <div id="adminJoinRequestsList" class="space-y-1.5"></div>
-          </div>
-
-          <!-- Invite Coach by Email -->
-          <div class="bg-slate-900/60 p-2 rounded border border-slate-700 space-y-2">
-            <p class="text-[10px] text-slate-300 font-semibold">✉️ Pre-Authorize / Invite by Email:</p>
-            <div class="flex gap-1.5">
-              <input type="text" id="inviteCoachNameInput" placeholder="Name" class="w-24 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
-              <input type="email" id="inviteCoachEmailInput" placeholder="coach@straffanafc.ie" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
-              <select id="inviteCoachRoleSelect" class="bg-slate-900 px-1.5 py-1 rounded border border-slate-600 text-[11px] text-white font-semibold">
-                <option value="coach" selected>Coach</option>
-                <option value="lead">Age Lead</option>
-                <option value="viewer">Viewer</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <p class="text-[9px] text-slate-400 mb-1">Assign Teams:</p>
-              <div id="inviteCoachTeamCheckboxes" class="flex flex-wrap gap-1.5"></div>
-            </div>
-            <div>
-              <p class="text-[9px] text-sky-400 mb-1">Age Groups (for Age-Group Lead role):</p>
-              <div id="inviteCoachAgeGroupCheckboxes" class="flex flex-wrap gap-1.5"></div>
-            </div>
-            <button onclick="handleInviteCoachUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-1.5 rounded font-bold text-[11px]">+ Send Email Invite &amp; Pre-Authorize</button>
-          </div>
-
-          <!-- Pending Email Invites -->
-          <div class="space-y-1">
-            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">📨 Pending Email Invites</p>
-            <div id="adminPendingInvitesList" class="space-y-1"></div>
-          </div>
-
-          <!-- Active Club Members -->
-          <div class="space-y-1">
-            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">👥 Club Members &amp; Roles</p>
-            <div class="space-y-1.5 max-h-60 overflow-y-auto" id="adminCoachesList"></div>
-          </div>
+        <!-- Shortcut to Dedicated Club Admin Dashboard (Milestone 14) -->
+        <div id="settingsOpenAdminBtn" class="hidden pt-2 border-t border-slate-700/70">
+          <button onclick="switchView('admin')" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5">
+            🛡️ Open Club Admin Dashboard (Coaches, Teams, Invites &amp; Join Code)
+          </button>
         </div>
 
         <!-- Migrate Legacy Prototype Data -->
@@ -206,9 +150,10 @@
 
     <!-- VIEW SELECTOR BAR -->
     <div class="bg-slate-800 p-1 rounded-lg border border-slate-700 mb-3 flex gap-1">
-      <button onclick="switchView('pitch')" id="nav-pitch" class="flex-1 py-2 text-center font-bold text-xs rounded bg-emerald-600 text-white shadow">🏟️ Pitch & Lineup</button>
-      <button onclick="switchView('splitter')" id="nav-splitter" class="flex-1 py-2 text-center font-bold text-xs rounded bg-slate-900 text-slate-400">📋 Squad Splitter</button>
-      <button onclick="switchView('stats')" id="nav-stats" class="flex-1 py-2 text-center font-bold text-xs rounded bg-slate-900 text-slate-400">📊 Squad & Stats</button>
+      <button onclick="switchView('pitch')" id="nav-pitch" class="flex-1 py-2 text-center font-bold text-[11px] rounded bg-emerald-600 text-white shadow">🏟️ Pitch</button>
+      <button onclick="switchView('splitter')" id="nav-splitter" class="flex-1 py-2 text-center font-bold text-[11px] rounded bg-slate-900 text-slate-400">📋 Splitter</button>
+      <button onclick="switchView('stats')" id="nav-stats" class="flex-1 py-2 text-center font-bold text-[11px] rounded bg-slate-900 text-slate-400">📊 Stats</button>
+      <button onclick="switchView('admin')" id="nav-admin" class="hidden flex-1 py-2 text-center font-bold text-[11px] rounded bg-slate-900 text-purple-300">🛡️ Admin</button>
     </div>
 
     <!-- REAL-TIME SHARED ROSTER CONFLICT BANNER (Blueprint Section 4.2) -->
@@ -479,6 +424,18 @@
           <tbody id="statsBody" class="divide-y divide-slate-700/60"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- VIEW 4: DEDICATED CLUB ADMIN DASHBOARD (Milestone 14) -->
+    <div id="view-admin" class="hidden pb-12 space-y-3">
+      <div class="bg-slate-800 p-1 rounded-lg border border-purple-500/40 flex gap-1">
+        <button id="admin-subtab-people" onclick="setAdminSubTab('people')" class="flex-1 py-1.5 px-2 text-center font-bold text-[11px] rounded bg-purple-600 text-white shadow">👥 Staff</button>
+        <button id="admin-subtab-teams" onclick="setAdminSubTab('teams')" class="flex-1 py-1.5 px-2 text-center font-semibold text-[11px] rounded bg-slate-900 text-slate-400">🛡️ Teams</button>
+        <button id="admin-subtab-overview" onclick="setAdminSubTab('overview')" class="flex-1 py-1.5 px-2 text-center font-semibold text-[11px] rounded bg-slate-900 text-slate-400">🏟️ Club</button>
+        <button id="admin-subtab-season" onclick="setAdminSubTab('season')" class="flex-1 py-1.5 px-2 text-center font-semibold text-[11px] rounded bg-slate-900 text-slate-400">🎓 Season</button>
+      </div>
+
+      <div id="adminDashboardBody" class="space-y-3"></div>
     </div>
 
   </main>

@@ -2160,6 +2160,78 @@ export async function deleteClubTeam(teamId) {
 }
 
 /**
+ * Milestone 14: End-of-Season Age-Group Promotion Helper (e.g. U10 -> U11)
+ */
+export async function promoteAgeGroupForNewSeason({
+  fromAgeGroup,
+  toAgeGroup,
+  renameTeamPrefixes = true
+}) {
+  const fromAg = (fromAgeGroup || '').trim();
+  const toAg = (toAgeGroup || '').trim();
+  if (!fromAg || !toAg) throw new Error('Both source and target age groups are required.');
+  if (fromAg === toAg) throw new Error('Target age group must be different from the current age group.');
+
+  const affectedTeams = (appState.allClubTeams || []).filter(t => (t.ageGroup || '') === fromAg);
+  const affectedPlayers = (appState.players || []).filter(p => (p.ageGroup || '') === fromAg);
+  const affectedUsers = (appState.allClubUsers || []).filter(u =>
+    Array.isArray(u.assignedAgeGroups) && u.assignedAgeGroups.includes(fromAg)
+  );
+
+  const prefixRegex = new RegExp(`^${fromAg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s+|$)`, 'i');
+  const now = new Date().toISOString();
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    for (const t of affectedTeams) {
+      const nextName =
+        renameTeamPrefixes && prefixRegex.test(t.name)
+          ? t.name.replace(prefixRegex, `${toAg}$1`)
+          : t.name;
+      await setDoc(doc(db, 'teams', t.teamId), { ageGroup: toAg, name: nextName, updatedAt: now }, { merge: true });
+    }
+    for (const p of affectedPlayers) {
+      await setDoc(doc(db, 'players', p.playerId), { ageGroup: toAg }, { merge: true });
+    }
+    for (const u of affectedUsers) {
+      const nextGroups = Array.from(
+        new Set((u.assignedAgeGroups || []).map(g => (g === fromAg ? toAg : g)))
+      );
+      await setDoc(doc(db, 'users', u.uid), { assignedAgeGroups: nextGroups, updatedAt: now }, { merge: true });
+    }
+  } else {
+    const store = loadLocalStore();
+    affectedTeams.forEach(t => {
+      if (store.teams[t.teamId]) {
+        store.teams[t.teamId].ageGroup = toAg;
+        if (renameTeamPrefixes && prefixRegex.test(store.teams[t.teamId].name)) {
+          store.teams[t.teamId].name = store.teams[t.teamId].name.replace(prefixRegex, `${toAg}$1`);
+        }
+      }
+    });
+    affectedPlayers.forEach(p => {
+      if (store.players[p.playerId]) {
+        store.players[p.playerId].ageGroup = toAg;
+      }
+    });
+    affectedUsers.forEach(u => {
+      if (store.users[u.uid]) {
+        store.users[u.uid].assignedAgeGroups = Array.from(
+          new Set((store.users[u.uid].assignedAgeGroups || []).map(g => (g === fromAg ? toAg : g)))
+        );
+      }
+    });
+    saveLocalStore(store);
+  }
+
+  return {
+    teamsUpdated: affectedTeams.length,
+    playersUpdated: affectedPlayers.length,
+    leadsUpdated: affectedUsers.length
+  };
+}
+
+/**
  * Milestone 8: Publish Age-Group Matchday Squad Split (e.g. 25 kids -> 3 teams for 3 coaches)
  */
 export async function publishAgeGroupSquadSplit({
