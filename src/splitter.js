@@ -6,6 +6,7 @@ import {
   createClubTeam,
   publishAgeGroupSquadSplit
 } from './db.js';
+import { computeAutoSplitAssignments } from './engine.js';
 import {
   canPublishSquadSplit,
   canCreateTeamInAgeGroup
@@ -123,33 +124,10 @@ export function autoSplitAgeGroupPlayers() {
     return;
   }
 
-  // Group players by preferredGroup so GKs, DEFs, MIDs, ATTs, and ANYs are distributed evenly across teams
-  const roleOrder = ['GK', 'DEF', 'MID', 'ATT', 'ANY'];
-  const sortedForDeal = [...availablePlayers].sort((a, b) => {
-    const rA = roleOrder.indexOf(a.preferredGroup || 'ANY');
-    const rB = roleOrder.indexOf(b.preferredGroup || 'ANY');
-    if (rA !== rB) return rA - rB;
-    return Math.random() - 0.5;
-  });
-
-  const teamCounts = {};
-  teams.forEach(t => {
-    teamCounts[t.teamId] = 0;
-  });
-
-  sortedForDeal.forEach(player => {
-    // Pick the team with the fewest players so far (preferring player's primaryTeamId on a tie)
-    const sortedTeams = [...teams].sort((tA, tB) => {
-      const diff = teamCounts[tA.teamId] - teamCounts[tB.teamId];
-      if (diff !== 0) return diff;
-      if (player.primaryTeamId === tA.teamId) return -1;
-      if (player.primaryTeamId === tB.teamId) return 1;
-      return 0;
-    });
-
-    const chosenTeamId = sortedTeams[0].teamId;
-    draft.assignments[player.playerId] = chosenTeamId;
-    teamCounts[chosenTeamId]++;
+  draft.assignments = computeAutoSplitAssignments({
+    teams,
+    players,
+    currentAssignments: draft.assignments
   });
 
   renderSquadSplitter();

@@ -31,6 +31,7 @@ import {
   importLegacyPayloadObject,
   importLegacyPrototypeData
 } from './db.js';
+import { computePlayerStats } from './engine.js';
 import {
   isClubAdmin,
   canEditTeam,
@@ -46,24 +47,6 @@ export function renderStats() {
   const currentTeam = getSelectedTeam();
   const teamPlayers = getTeamPlayers(currentTeam.teamId);
 
-  const stats = {};
-  teamPlayers.forEach(p => {
-    const name = getPlayerDisplayName(p);
-    stats[name] = {
-      playerObj: p,
-      TOTAL: 0,
-      GK: 0,
-      DEF: 0,
-      MID: 0,
-      ATT: 0,
-      GOALS: 0,
-      ASSISTS: 0,
-      STARS: 0,
-      YELLOWS: 0,
-      REDS: 0
-    };
-  });
-
   const currentMatchId = getMatchId(currentTeam.teamId, appState.selectedDate);
   const matchIdsToCount =
     scope === 'match'
@@ -72,128 +55,13 @@ export function renderStats() {
       ? Object.keys(appState.matchesByTeam)
       : [currentMatchId];
 
-  matchIdsToCount.forEach(mId => {
-    const matchDoc = appState.matchesByTeam[mId] || getCurrentMatchDoc();
-    const qtrMins = parseFloat(matchDoc.qtrMins) || currentTeam.defaultQtrMins || 12;
-    const format = matchDoc.formation || '7v7';
-    const periods = getMatchPeriods(matchDoc);
-
-    const quartersMap = appState.lineupsByMatch[mId] || {};
-    periods.forEach(q => {
-      const qObj = quartersMap[q];
-      if (!qObj) return;
-      const qData = qObj.lineup || {};
-      const swaps = qObj.swaps || [];
-
-      const activePositions = getPositionsForFormatAndShape(
-        format,
-        qObj.tacticalShape || matchDoc.tacticalShape
-      );
-      const posGroupMap = {};
-      activePositions.forEach(pos => {
-        posGroupMap[pos.id] = pos.group;
-      });
-
-      activePositions.forEach(pos => {
-        const pName = qData[pos.id];
-        if (!pName) return;
-        const group = pos.group;
-
-        const involvedSwap = swaps.find(
-          s => s.text && (s.text.includes(`at ${pos.id}`) || s.text.includes(`(${pos.id})`))
-        );
-        const mins = involvedSwap ? qtrMins / 2 : qtrMins;
-
-        if (!stats[pName]) {
-          stats[pName] = {
-            playerObj: null,
-            TOTAL: 0,
-            GK: 0,
-            DEF: 0,
-            MID: 0,
-            ATT: 0,
-            GOALS: 0,
-            ASSISTS: 0,
-            STARS: 0
-          };
-        }
-        stats[pName][group] += mins;
-        stats[pName].TOTAL += mins;
-      });
-
-      // Tally Match Events (Goals, Assists, Saves, Effort Stars, Yellow/Red Cards — Milestone 12)
-      (qObj.events || []).forEach(ev => {
-        if (ev.player) {
-          if (!stats[ev.player]) {
-            stats[ev.player] = {
-              playerObj: null,
-              TOTAL: 0,
-              GK: 0,
-              DEF: 0,
-              MID: 0,
-              ATT: 0,
-              GOALS: 0,
-              ASSISTS: 0,
-              STARS: 0,
-              YELLOWS: 0,
-              REDS: 0
-            };
-          }
-          if (ev.type === 'GOAL') stats[ev.player].GOALS++;
-          else if (ev.type === 'SAVE' || ev.type === 'STAR') stats[ev.player].STARS++;
-          else if (ev.type === 'YELLOW') stats[ev.player].YELLOWS = (stats[ev.player].YELLOWS || 0) + 1;
-          else if (ev.type === 'RED') stats[ev.player].REDS = (stats[ev.player].REDS || 0) + 1;
-        }
-        if (ev.assist) {
-          if (!stats[ev.assist]) {
-            stats[ev.assist] = {
-              playerObj: null,
-              TOTAL: 0,
-              GK: 0,
-              DEF: 0,
-              MID: 0,
-              ATT: 0,
-              GOALS: 0,
-              ASSISTS: 0,
-              STARS: 0,
-              YELLOWS: 0,
-              REDS: 0
-            };
-          }
-          stats[ev.assist].ASSISTS++;
-        }
-      });
-
-      // Also credit outgoing substituted players with their 50% first-half of the quarter
-      swaps.forEach(sw => {
-        if (!sw.text) return;
-        const subMatch = sw.text.match(/^(.+) replaced (.+) at ([A-Z0-9]+)/);
-        if (subMatch) {
-          const outgoingPlayer = subMatch[2].trim();
-          const posId = subMatch[3].trim();
-          const group = posGroupMap[posId] || 'MID';
-          const halfMins = qtrMins / 2;
-          if (!stats[outgoingPlayer]) {
-            stats[outgoingPlayer] = {
-              playerObj: null,
-              TOTAL: 0,
-              GK: 0,
-              DEF: 0,
-              MID: 0,
-              ATT: 0,
-              GOALS: 0,
-              ASSISTS: 0,
-              STARS: 0
-            };
-          }
-          // Only credit if outgoingPlayer is not currently occupying that slot
-          if (qData[posId] !== outgoingPlayer) {
-            stats[outgoingPlayer][group] += halfMins;
-            stats[outgoingPlayer].TOTAL += halfMins;
-          }
-        }
-      });
-    });
+  const stats = computePlayerStats({
+    roster: teamPlayers.map(p => ({ name: getPlayerDisplayName(p), playerObj: p })),
+    matchIds: matchIdsToCount,
+    matchesMap: appState.matchesByTeam || {},
+    lineupsByMatch: appState.lineupsByMatch || {},
+    fallbackMatch: getCurrentMatchDoc(),
+    defaultQtrMins: currentTeam.defaultQtrMins || 12
   });
 
   const tbody = document.getElementById('statsBody');

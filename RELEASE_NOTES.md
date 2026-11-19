@@ -13,14 +13,11 @@
 
 ```mermaid
 flowchart LR
-    M1["M1: Vite + Firebase Foundation"] --> M2["M2: Coach Auth & RBAC"]
-    M2 --> M3["M3: Real-Time Firestore & Conflict Detection"]
-    M3 --> M4["M4: Core Pitch, 50/50 Swaps & Stats"]
-    M4 --> M5["M5: Admin Coach Panel, Bulk Paste & Live Hosting"]
-    M5 --> M6["M6: 5v5–11v11 (25 Formations) & Mini-Pitch Export"]
-    M6 --> M7["M7: Halves/Thirds/Quarters & Specialist GK Tags"]
-    M7 --> M8["M8: 25-Kid → 3-Team Matchday Squad Splitter"]
-    M8 --> M9["M9: Pocket-Safe Sideline Timer & 50% Sub Alerts"]
+    M1["M1–M5: Firebase, Auth & Admin"] --> M6["M6–M7: 25 Formations & Periods"]
+    M6 --> M8["M8–M9: Squad Splitter & Timer"]
+    M8 --> M10["M10–M12: PWA, Season Memory & Events"]
+    M10 --> M13["M13–M14: 4-Role RBAC & Club Admin"]
+    M13 --> M15["M15–M16: Multi-Club Hub & Unit Tests"]
 ```
 
 ---
@@ -165,3 +162,12 @@ flowchart LR
   * **Multi-Club Memberships & Header Club Switcher:** Users belonging to 2+ clubs get a live **Header Club Switcher** (`#clubSwitcherSelect`) plus a **Your Clubs** panel in the Club Hub to switch clubs in 1 tap (dynamically updating club crest, name, role, teams, players, and matches).
   * **Zero-Trust Multi-Club Firestore Rules:** Enforces `isValidClubSwitch`, `isValidNewClubAddition`, `isValidAdditionalInviteClaim`, and `isAdminUpdatingClubMembership` so users can switch between authorized clubs or register new isolated clubs without any possibility of role escalation or cross-club tampering.
   * **Club-Neutral Sign-In & Dynamic Title:** Removed hardcoded Straffan AFC strings from the generic sign-in screen and browser title, dynamically branding the app to whichever club is active.
+
+---
+
+### Milestone 16: Pure Domain Engine Extraction, Automated Test Suite & Docs Sync
+* **Files:** [src/engine.js](file:///home/neildrosario/MatchDay-Ready/src/engine.js), [tests/permissions.test.js](file:///home/neildrosario/MatchDay-Ready/tests/permissions.test.js), [tests/stats-and-swaps.test.js](file:///home/neildrosario/MatchDay-Ready/tests/stats-and-swaps.test.js), [tests/fairness-and-formations.test.js](file:///home/neildrosario/MatchDay-Ready/tests/fairness-and-formations.test.js), [tests/splitter-and-utils.test.js](file:///home/neildrosario/MatchDay-Ready/tests/splitter-and-utils.test.js), [package.json](file:///home/neildrosario/MatchDay-Ready/package.json), [.github/workflows/firebase-hosting.yml](file:///home/neildrosario/MatchDay-Ready/.github/workflows/firebase-hosting.yml), [README.md](file:///home/neildrosario/MatchDay-Ready/README.md), [ROADMAP.md](file:///home/neildrosario/MatchDay-Ready/ROADMAP.md)
+* **What Was Built:**
+  * **Pure Domain Engine (`src/engine.js`):** Extracted zero-DOM, zero-Firebase engines for all 25 formations, smart remapping, 50/50 swap & match event stats, season-aware Auto-Fair rotation, age-group squad splitting, shared player conflict detection, join code/slug utilities, and universal `uFootballApp` legacy parsing—removing ~600 lines of duplicated code across `db.js`, `pitch.js`, `stats.js`, and `splitter.js`.
+  * **Zero-Dependency Unit Test Suite (`npm test`):** Added 4 test suites using Node's native `node:test` runner covering 4-role RBAC + Last-Admin safeguards, 50/50 fractional swaps + events, all 25 formations + season-aware rotation, and 25-kid Squad Splitter distribution.
+  * **CI Quality Gate & Docs Sync:** Wired `npm test` into GitHub Actions before every production build & Firebase Hosting deploy, and brought [README.md](file:///home/neildrosario/MatchDay-Ready/README.md), [ROADMAP.md](file:///home/neildrosario/MatchDay-Ready/ROADMAP.md), and [RELEASE_NOTES.md](file:///home/neildrosario/MatchDay-Ready/RELEASE_NOTES.md) fully up to date.

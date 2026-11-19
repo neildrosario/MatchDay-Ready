@@ -25,300 +25,41 @@ import {
   canRemoveUser,
   normalizeRole
 } from './permissions.js';
+import {
+  FORMAT_SIZES,
+  FORMATIONS_BY_FORMAT,
+  FORMATIONS,
+  getDefaultShapeForFormat,
+  getAvailableShapesForFormat,
+  getPositionsForFormatAndShape,
+  getMatchPeriodsForCount,
+  getPeriodShortLabel,
+  getPeriodLongLabel,
+  getPeriodUnitLabel,
+  computeHistoricalSeasonFairnessSeed,
+  detectSharedPlayerConflicts,
+  normalizeJoinCode,
+  generateClubJoinCode,
+  generateClubSlug,
+  extractUFootballVersionRank,
+  parseUFootballPayloadFromString
+} from './engine.js';
 
-export const FORMAT_SIZES = {
-  '5v5': 5,
-  '6v6': 6,
-  '7v7': 7,
-  '9v9': 9,
-  '11v11': 11
-};
-
-export const FORMATIONS_BY_FORMAT = {
-  '5v5': {
-    'GK-2-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
-    ],
-    'GK-1-2-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-1-3': [
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 1 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 1 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 1 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
-    ],
-    'GK-3-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 2 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 3 }
-    ]
-  },
-  '6v6': {
-    'GK-2-2-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'CM1', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM2', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-1-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-2-1-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-1-3-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ]
-  },
-  '7v7': {
-    'GK-2-3-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-2-1': [
-      { id: 'ATT', label: 'ATT', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-2-1-3': [
-      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-2-2-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-1-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ]
-  },
-  '9v9': {
-    'GK-3-3-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-2-3': [
-      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-4-1': [
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-2-4-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-4-3-1': [
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-2-3-3': [
-      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LD', label: 'LD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RD', label: 'RD', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ]
-  },
-  '11v11': {
-    'GK-4-3-3': [
-      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-4-4-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-4-2-3-1': [
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LAM', label: 'LAM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CAM', label: 'CAM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RAM', label: 'RAM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCDM', label: 'LCDM', group: 'MID', color: 'bg-amber-700', row: 3 },
-      { id: 'RCDM', label: 'RCDM', group: 'MID', color: 'bg-amber-700', row: 3 },
-      { id: 'LB', label: 'LB', group: 'DEF', color: 'bg-sky-600', row: 4 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 4 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 4 },
-      { id: 'RB', label: 'RB', group: 'DEF', color: 'bg-sky-600', row: 4 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 5 }
-    ],
-    'GK-3-5-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LWB', label: 'LWB', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RWB', label: 'RWB', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-3-4-3': [
-      { id: 'LW', label: 'LW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'ST', label: 'ST', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RW', label: 'RW', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LM', label: 'LM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RM', label: 'RM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ],
-    'GK-5-3-2': [
-      { id: 'LF', label: 'LF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'RF', label: 'RF', group: 'ATT', color: 'bg-rose-600', row: 1 },
-      { id: 'LCM', label: 'LCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'CM', label: 'CM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'RCM', label: 'RCM', group: 'MID', color: 'bg-amber-600', row: 2 },
-      { id: 'LWB', label: 'LWB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'LCB', label: 'LCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'CB', label: 'CB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RCB', label: 'RCB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'RWB', label: 'RWB', group: 'DEF', color: 'bg-sky-600', row: 3 },
-      { id: 'GK', label: 'GK', group: 'GK', color: 'bg-purple-600', row: 4 }
-    ]
-  }
-};
-
-export function getDefaultShapeForFormat(format = '7v7') {
-  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
-  return Object.keys(shapes)[0];
-}
-
-export function getAvailableShapesForFormat(format = '7v7') {
-  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
-  return Object.keys(shapes);
-}
-
-export function getPositionsForFormatAndShape(format = '7v7', shape = null) {
-  const shapes = FORMATIONS_BY_FORMAT[format] || FORMATIONS_BY_FORMAT['7v7'];
-  const resolvedShape = shape && shapes[shape] ? shape : Object.keys(shapes)[0];
-  return shapes[resolvedShape];
-}
-
-// Legacy alias for any module expecting FORMATIONS[format]
-export const FORMATIONS = {
-  '5v5': FORMATIONS_BY_FORMAT['5v5']['GK-2-2'],
-  '6v6': FORMATIONS_BY_FORMAT['6v6']['GK-2-2-1'],
-  '7v7': FORMATIONS_BY_FORMAT['7v7']['GK-2-3-1'],
-  '9v9': FORMATIONS_BY_FORMAT['9v9']['GK-3-3-2'],
-  '11v11': FORMATIONS_BY_FORMAT['11v11']['GK-4-3-3']
+export {
+  FORMAT_SIZES,
+  FORMATIONS_BY_FORMAT,
+  FORMATIONS,
+  getDefaultShapeForFormat,
+  getAvailableShapesForFormat,
+  getPositionsForFormatAndShape,
+  getPeriodShortLabel,
+  getPeriodLongLabel,
+  getPeriodUnitLabel,
+  normalizeJoinCode,
+  generateClubJoinCode,
+  generateClubSlug,
+  extractUFootballVersionRank,
+  parseUFootballPayloadFromString
 };
 
 const LOCAL_CLUB_STORE_KEY = 'matchday_club_store_v3';
@@ -469,35 +210,6 @@ const backfilledClubIds = new Set();
 
 export function getActiveClubId() {
   return appState.userProfile?.clubId || appState.club?.clubId || DEFAULT_CLUB_ID;
-}
-
-export function normalizeJoinCode(raw = '') {
-  return String(raw || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9-]/g, '');
-}
-
-export function generateClubJoinCode(clubShortName = 'CLUB') {
-  const prefix =
-    String(clubShortName || 'CLUB')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 8) || 'CLUB';
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}-${suffix}`;
-}
-
-export function generateClubSlug(clubName = 'club') {
-  const base =
-    String(clubName || 'club')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '')
-      .slice(0, 28) || 'club';
-  const suffix = Math.floor(1000 + Math.random() * 9000);
-  return `${base}_${suffix}`;
 }
 
 /**
@@ -1400,31 +1112,7 @@ export function getCurrentMatchDoc() {
 
 export function getMatchPeriods(matchDocInput = null) {
   const match = matchDocInput || getCurrentMatchDoc();
-  const count = Number(match?.periodCount) || 4;
-  if (count === 2) return [1, 2];
-  if (count === 3) return [1, 2, 3];
-  return [1, 2, 3, 4];
-}
-
-export function getPeriodShortLabel(pNum, periodCount = 4) {
-  const c = Number(periodCount) || 4;
-  if (c === 2) return `H${pNum}`;
-  if (c === 3) return `T${pNum}`;
-  return `Q${pNum}`;
-}
-
-export function getPeriodLongLabel(pNum, periodCount = 4) {
-  const c = Number(periodCount) || 4;
-  if (c === 2) return `Half ${pNum}`;
-  if (c === 3) return `Third ${pNum}`;
-  return `Quarter ${pNum}`;
-}
-
-export function getPeriodUnitLabel(periodCount = 4) {
-  const c = Number(periodCount) || 4;
-  if (c === 2) return 'm/h';
-  if (c === 3) return 'm/t';
-  return 'm/q';
+  return getMatchPeriodsForCount(match?.periodCount || 4);
 }
 
 export function getQuarterLineupDoc(quarter = appState.currentQuarter, matchIdInput = null) {
@@ -1470,102 +1158,16 @@ export function getHistoricalSeasonFairnessSeed(
   const currentMatch = getCurrentMatchDoc();
   const baseUnitMins = parseFloat(currentMatch.qtrMins) || team.defaultQtrMins || 12;
 
-  const rawStats = {};
-  playerNames.forEach(pName => {
-    rawStats[pName] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
-  });
-
-  const allTeamMatches = Object.values(appState.allMatches || {}).filter(
+  const priorMatches = Object.values(appState.allMatches || {}).filter(
     m => m.teamId === teamId && m.date && m.date !== excludeDateStr
   );
 
-  allTeamMatches.forEach(mDoc => {
-    const qtrMins = parseFloat(mDoc.qtrMins) || 12;
-    const format = mDoc.formation || '7v7';
-    const periods = getMatchPeriods(mDoc);
-    const quartersMap = appState.lineupsByMatch[mDoc.matchId] || {};
-    const playedThisMatch = new Set();
-
-    periods.forEach(q => {
-      const qObj = quartersMap[q];
-      if (!qObj) return;
-      const qData = qObj.lineup || {};
-      const swaps = qObj.swaps || [];
-      const activePositions = getPositionsForFormatAndShape(
-        format,
-        qObj.tacticalShape || mDoc.tacticalShape
-      );
-      const posGroupMap = {};
-      activePositions.forEach(pos => {
-        posGroupMap[pos.id] = pos.group;
-      });
-
-      activePositions.forEach(pos => {
-        const pName = qData[pos.id];
-        if (!pName) return;
-        const involvedSwap = swaps.find(
-          s => s.text && (s.text.includes(`at ${pos.id}`) || s.text.includes(`(${pos.id})`))
-        );
-        const mins = involvedSwap ? qtrMins / 2 : qtrMins;
-        if (!rawStats[pName]) {
-          rawStats[pName] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
-        }
-        rawStats[pName][pos.group] += mins;
-        rawStats[pName].TOTAL += mins;
-        playedThisMatch.add(pName);
-      });
-
-      swaps.forEach(sw => {
-        if (!sw.text) return;
-        const subMatch = sw.text.match(/^(.+) replaced (.+) at ([A-Z0-9]+)/);
-        if (subMatch) {
-          const outgoingPlayer = subMatch[2].trim();
-          const posId = subMatch[3].trim();
-          const group = posGroupMap[posId] || 'MID';
-          const halfMins = qtrMins / 2;
-          if (!rawStats[outgoingPlayer]) {
-            rawStats[outgoingPlayer] = { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0, matchesPlayed: 0 };
-          }
-          if (qData[posId] !== outgoingPlayer) {
-            rawStats[outgoingPlayer][group] += halfMins;
-            rawStats[outgoingPlayer].TOTAL += halfMins;
-            playedThisMatch.add(outgoingPlayer);
-          }
-        }
-      });
-    });
-
-    playedThisMatch.forEach(pName => {
-      if (rawStats[pName]) rawStats[pName].matchesPlayed++;
-    });
+  return computeHistoricalSeasonFairnessSeed({
+    playerNames,
+    priorMatches,
+    lineupsByMatch: appState.lineupsByMatch || {},
+    baseUnitMins
   });
-
-  // Compute average historical total minutes among players who have appeared in at least 1 prior match
-  const activeHistPlayers = Object.values(rawStats).filter(s => s.TOTAL > 0);
-  const avgHistTotal =
-    activeHistPlayers.length > 0
-      ? activeHistPlayers.reduce((sum, s) => sum + s.TOTAL, 0) / activeHistPlayers.length
-      : 0;
-
-  const seed = {};
-  playerNames.forEach(pName => {
-    const s = rawStats[pName] || { TOTAL: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
-    // Normalize offset so a player who played less than average starts with a negative offset (higher priority!)
-    let offsetPeriods = 0;
-    if (s.TOTAL > 0 && avgHistTotal > 0) {
-      offsetPeriods = Math.max(-1.5, Math.min(1.5, (s.TOTAL - avgHistTotal) / baseUnitMins));
-    }
-    seed[pName] = {
-      totalQtrs: Number(offsetPeriods.toFixed(2)),
-      GK: Number((s.GK / baseUnitMins).toFixed(2)),
-      DEF: Number((s.DEF / baseUnitMins).toFixed(2)),
-      MID: Number((s.MID / baseUnitMins).toFixed(2)),
-      ATT: Number((s.ATT / baseUnitMins).toFixed(2)),
-      rawTotalMins: s.TOTAL
-    };
-  });
-
-  return seed;
 }
 
 /**
@@ -1576,34 +1178,14 @@ export function getHistoricalSeasonFairnessSeed(
 export function getSharedPlayerConflicts(quarter = appState.currentQuarter) {
   const currentTeam = getSelectedTeam();
   const currentQDoc = getQuarterLineupDoc(quarter);
-  const currentAssignedPlayers = new Set(
-    Object.values(currentQDoc.lineup || {}).filter(Boolean)
-  );
-  if (currentAssignedPlayers.size === 0) return [];
-
-  const conflicts = [];
-  appState.sameDateLineupsAllTeams.forEach(otherLineup => {
-    if (
-      otherLineup.quarter === quarter &&
-      otherLineup.date === appState.selectedDate &&
-      otherLineup.teamId &&
-      otherLineup.teamId !== currentTeam.teamId
-    ) {
-      const otherTeam = appState.allClubTeams.find(t => t.teamId === otherLineup.teamId);
-      const otherTeamName = otherTeam ? otherTeam.name : otherLineup.teamId;
-      Object.entries(otherLineup.lineup || {}).forEach(([posId, playerName]) => {
-        if (playerName && currentAssignedPlayers.has(playerName)) {
-          conflicts.push({
-            playerName,
-            otherTeamName,
-            otherPosId: posId,
-            quarter
-          });
-        }
-      });
-    }
+  return detectSharedPlayerConflicts({
+    currentTeamId: currentTeam.teamId,
+    currentLineup: currentQDoc.lineup || {},
+    dateStr: appState.selectedDate,
+    quarter,
+    sameDateLineupsAllTeams: appState.sameDateLineupsAllTeams || [],
+    allClubTeams: appState.allClubTeams || []
   });
-  return conflicts;
 }
 
 // --- MUTATION FUNCTIONS (Optimistic + Firestore / Local Store) ---
@@ -2989,60 +2571,6 @@ export async function publishAgeGroupSquadSplit({
   if (!isFirebase && store) {
     saveLocalStore(store);
   }
-}
-
-/**
- * Extract numeric version rank from any key or filename like `uFootballAppV4`, `uFootballApp_v2.json`, `uFootballApp`
- */
-export function extractUFootballVersionRank(name = '') {
-  const match = String(name).match(/uFootballApp[_\-\s]*v?(\d+)/i);
-  if (match && match[1]) {
-    return parseInt(match[1], 10);
-  }
-  if (/uFootballApp/i.test(name)) {
-    return 0;
-  }
-  return -1;
-}
-
-/**
- * Parse a uFootballApp state payload from raw JSON, SheetDB response array, or HTML file
- */
-export function parseUFootballPayloadFromString(rawText = '') {
-  const trimmed = (rawText || '').trim();
-  if (!trimmed) return null;
-
-  // 1. Try direct JSON parse
-  try {
-    const parsed = JSON.parse(trimmed);
-    // Handle SheetDB array format: [{ id: 'app_state', data: '{"players":...}' }]
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].data) {
-      const inner = typeof parsed[0].data === 'string' ? JSON.parse(parsed[0].data) : parsed[0].data;
-      if (inner && Array.isArray(inner.players)) return inner;
-    }
-    // Handle wrapped { data: '{"players":...}' }
-    if (parsed && typeof parsed.data === 'string') {
-      const inner = JSON.parse(parsed.data);
-      if (inner && Array.isArray(inner.players)) return inner;
-    }
-    if (parsed && (Array.isArray(parsed.players) || typeof parsed.matches === 'object')) {
-      return parsed;
-    }
-  } catch (_) {}
-
-  // 2. If user selected an .html or .js file, extract any embedded JSON state or players array
-  const playersMatch = trimmed.match(/players\s*:\s*\[([^\]]+)\]/);
-  if (playersMatch) {
-    const names = playersMatch[1]
-      .split(',')
-      .map(s => s.replace(/['"`]/g, '').trim())
-      .filter(Boolean);
-    if (names.length > 0) {
-      return { players: names, matches: {} };
-    }
-  }
-
-  return null;
 }
 
 /**

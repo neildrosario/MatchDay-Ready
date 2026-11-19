@@ -20,6 +20,10 @@ import {
   saveMatchMetadata,
   saveQuarterLineup
 } from './db.js';
+import {
+  remapLineupToNewPositions,
+  generateFairPeriodLineups
+} from './engine.js';
 import { canEditTeam } from './permissions.js';
 
 function canEditCurrentTeam() {
@@ -43,42 +47,6 @@ export function getActivePositions(quarter = appState.currentQuarter) {
 export function getTeamSize() {
   const match = getCurrentMatchDoc();
   return FORMAT_SIZES[match.formation || '7v7'] || 7;
-}
-
-/**
- * Intelligently remaps an existing lineup object from a previous formation shape
- * into `newPositions` so switching formations mid-match never drops players off the pitch.
- */
-function remapLineupToNewPositions(oldLineup = {}, newPositions = []) {
-  const newLineup = {};
-  const usedPlayers = new Set();
-  const remainingPlayers = [];
-
-  // 1. Keep exact slot ID matches first (e.g. GK -> GK, LD -> LD)
-  newPositions.forEach(pos => {
-    const existingPlayer = oldLineup[pos.id];
-    if (existingPlayer && !usedPlayers.has(existingPlayer)) {
-      newLineup[pos.id] = existingPlayer;
-      usedPlayers.add(existingPlayer);
-    }
-  });
-
-  // Collect players from oldLineup who weren't placed by exact slot ID
-  Object.values(oldLineup).forEach(pName => {
-    if (pName && !usedPlayers.has(pName)) {
-      remainingPlayers.push(pName);
-      usedPlayers.add(pName);
-    }
-  });
-
-  // 2. Fill any remaining open slots in newPositions with remaining on-pitch players
-  newPositions.forEach(pos => {
-    if (!newLineup[pos.id] && remainingPlayers.length > 0) {
-      newLineup[pos.id] = remainingPlayers.shift();
-    }
-  });
-
-  return newLineup;
 }
 
 export function renderHeaderAndMatchBar() {
@@ -840,135 +808,38 @@ export async function autoGenerateMatch() {
     return;
   }
 
-  const tracking = {};
-  playerNames.forEach(p => {
-    const hist = seasonSeed[p] || { totalQtrs: 0, GK: 0, DEF: 0, MID: 0, ATT: 0 };
-    tracking[p] = {
-      totalQtrs: hist.totalQtrs || 0,
-      GK: hist.GK || 0,
-      DEF: hist.DEF || 0,
-      MID: hist.MID || 0,
-      ATT: hist.ATT || 0
-    };
+  const shapeByPeriod = {};
+  const unavailableByPeriod = {};
+  periods.forEach(q => {
+    const qObj = getQuarterLineupDoc(q);
+    shapeByPeriod[q] = qObj.tacticalShape;
+    unavailableByPeriod[q] = qObj.unavailablePlayers || [];
+  });
+
+  const { lineupsByPeriod, skippedPeriods } = generateFairPeriodLineups({
+    playerNames,
+    preferredMap,
+    periods,
+    format: match.formation || '7v7',
+    shapeByPeriod,
+    defaultShape: match.tacticalShape,
+    unavailableByPeriod,
+    seasonSeed
   });
 
   for (const q of periods) {
-    const qObj = getQuarterLineupDoc(q);
-    const activePositions = getActivePositions(q);
-    const unavailSet = new Set(qObj.unavailablePlayers || []);
-    const availablePlayers = playerNames.filter(p => !unavailSet.has(p));
-
-    if (availablePlayers.length < teamSize) {
+    if (skippedPeriods.includes(q)) {
       alert(
         `Warning: ${getPeriodLongLabel(q, periodCount)} has fewer than ${teamSize} available players. Skipping auto-fill.`
       );
       continue;
     }
-
-    // Sort by lowest total periods played so far for fair playing time
-    availablePlayers.sort((a, b) => {
-      if (tracking[a].totalQtrs !== tracking[b].totalQtrs) {
-        return tracking[a].totalQtrs - tracking[b].totalQtrs;
-      }
-      return Math.random() - 0.5;
-    });
-
-    const startingPlayers = availablePlayers.slice(0, teamSize);
-    const newLineup = {};
-
-    // 1. Assign GK — If the squad has specialist 🧤 GKs available, ensure one is in goal
-    const availableSpecGKs = availablePlayers
-      .filter(p => preferredMap[p] === 'GK')
-      .sort((a, b) => tracking[a].GK - tracking[b].GK || tracking[a].totalQtrs - tracking[b].totalQtrs);
-
-    if (availableSpecGKs.length > 0) {
-      const chosenGK = availableSpecGKs[0];
-      if (!startingPlayers.includes(chosenGK)) {
-        // Swap out the last non-GK starter so startingPlayers stays exact teamSize
-        for (let i = startingPlayers.length - 1; i >= 0; i--) {
-          if (preferredMap[startingPlayers[i]] !== 'GK') {
-            startingPlayers[i] = chosenGK;
-            break;
-          }
-        }
-      }
-      newLineup.GK = chosenGK;
-      tracking[chosenGK].GK++;
-    } else {
-      // No specialist GK tagged -> rotate GK fairly across starters
-      startingPlayers.sort((a, b) => tracking[a].GK - tracking[b].GK);
-      newLineup.GK = startingPlayers[0];
-      tracking[startingPlayers[0]].GK++;
-    }
-
-    let remaining = startingPlayers.filter(p => p !== newLineup.GK);
-
-    // Helper priority comparator for zone preference ('ATT', 'DEF', 'MID')
-    const zonePriority = (pName, targetZone) => {
-      const pref = preferredMap[pName] || 'ANY';
-      if (pref === targetZone) return 0; // Explicitly prefers this zone
-      if (pref === 'ANY') return 1; // Flexible rotation player
-      return 2; // Prefers a different zone
-    };
-
-    // 2. Assign ATT slots
-    const attSlots = activePositions.filter(p => p.group === 'ATT');
-    if (attSlots.length > 0) {
-      remaining.sort((a, b) => {
-        const prioDiff = zonePriority(a, 'ATT') - zonePriority(b, 'ATT');
-        if (prioDiff !== 0) return prioDiff;
-        return tracking[a].ATT - tracking[b].ATT;
-      });
-      attSlots.forEach((slot, idx) => {
-        if (remaining[idx]) {
-          newLineup[slot.id] = remaining[idx];
-          tracking[remaining[idx]].ATT++;
-        }
-      });
-      remaining = remaining.slice(attSlots.length);
-    }
-
-    // 3. Assign DEF slots
-    const defSlots = activePositions.filter(p => p.group === 'DEF');
-    if (defSlots.length > 0) {
-      remaining.sort((a, b) => {
-        const prioDiff = zonePriority(a, 'DEF') - zonePriority(b, 'DEF');
-        if (prioDiff !== 0) return prioDiff;
-        return tracking[a].DEF - tracking[b].DEF;
-      });
-      defSlots.forEach((slot, idx) => {
-        if (remaining[idx]) {
-          newLineup[slot.id] = remaining[idx];
-          tracking[remaining[idx]].DEF++;
-        }
-      });
-      remaining = remaining.slice(defSlots.length);
-    }
-
-    // 4. Assign MID slots
-    const midSlots = activePositions.filter(p => p.group === 'MID');
-    if (midSlots.length > 0) {
-      remaining.sort((a, b) => {
-        const prioDiff = zonePriority(a, 'MID') - zonePriority(b, 'MID');
-        if (prioDiff !== 0) return prioDiff;
-        return tracking[a].MID - tracking[b].MID;
-      });
-      midSlots.forEach((slot, idx) => {
-        if (remaining[idx]) {
-          newLineup[slot.id] = remaining[idx];
-          tracking[remaining[idx]].MID++;
-        }
-      });
-    }
-
-    startingPlayers.forEach(p => {
-      tracking[p].totalQtrs++;
-    });
-
+    const generated = lineupsByPeriod[q];
+    if (!generated) continue;
     await saveQuarterLineup(q, {
-      tacticalShape: qObj.tacticalShape,
-      lineup: newLineup,
-      unavailablePlayers: qObj.unavailablePlayers || [],
+      tacticalShape: generated.tacticalShape,
+      lineup: generated.lineup,
+      unavailablePlayers: unavailableByPeriod[q] || [],
       swaps: []
     });
   }
