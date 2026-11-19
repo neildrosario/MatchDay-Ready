@@ -16,6 +16,11 @@
   touch-action: manipulation;
 }
 
+/* Hide default Safari disclosure triangle on collapsible Match Details summary */
+#matchDetailsAccordion > summary::-webkit-details-marker {
+  display: none;
+}
+
 /* --------------------------------------------------------------------------
    1. Theme Tokens & Stadium Turf Backdrop
    -------------------------------------------------------------------------- */

@@ -25,26 +25,26 @@
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-24 font-sans">
 
-  <!-- Top Bar -->
-  <header class="bg-slate-800 p-3 border-b border-slate-700 sticky top-0 z-20 shadow-md space-y-2">
+  <!-- Top Bar (Compact 2-Row Header so Pitch sits high on mobile) -->
+  <header class="bg-slate-800 px-3 py-2 border-b border-slate-700 sticky top-0 z-20 shadow-md space-y-1.5">
     <!-- Row 1: App Branding (Top-Left) & Uploaded Club Crest (Top-Right) -->
     <div class="flex justify-between items-center gap-2">
       <div class="flex items-center gap-2 min-w-0">
-        <div class="w-9 h-9 rounded-full border-2 border-emerald-400/80 shadow-md shrink-0 bg-emerald-950 overflow-hidden"
+        <div class="w-8 h-8 rounded-full border-2 border-emerald-400/80 shadow-md shrink-0 bg-emerald-950 overflow-hidden"
              style="background-image: url('/matchdayready-logo.jpeg'); background-position: center; background-size: 228% 124%; background-repeat: no-repeat;"
               role="img" aria-label="MatchDay Ready Logo"></div>
         <div class="min-w-0">
-          <div class="font-bold text-emerald-400 text-base leading-tight truncate">MatchDay Ready</div>
-          <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+          <div class="font-bold text-emerald-400 text-sm leading-tight truncate">MatchDay Ready</div>
+          <div class="flex items-center gap-1 mt-0.5 flex-wrap">
             <button id="clubTitleBadge" type="button" onclick="openClubHubModal()" title="Switch, join, or register another club" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-1.5 py-0.5 rounded font-semibold transition">MatchDay Ready</button>
-            <select id="clubSwitcherSelect" onchange="handleSwitchClubUI(this.value)" title="Switch Active Club" class="hidden text-[10px] bg-slate-900 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/40 max-w-[165px] truncate"></select>
+            <select id="clubSwitcherSelect" onchange="handleSwitchClubUI(this.value)" title="Switch Active Club" class="hidden text-[10px] bg-slate-900 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/40 max-w-[155px] truncate"></select>
             <span id="syncStatus" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Local Mode</span>
           </div>
         </div>
       </div>
 
       <!-- Top-Right Uploaded Club Logo (or Admin Upload Button) -->
-      <button id="headerClubLogoBtn" onclick="openClubLogoUpload()" type="button" class="hidden w-10 h-10 rounded-full border-2 border-white/75 bg-white/95 p-0.5 shadow-md shrink-0 flex items-center justify-center overflow-hidden hover:border-emerald-400 transition" title="Club Logo">
+      <button id="headerClubLogoBtn" onclick="openClubLogoUpload()" type="button" class="hidden w-9 h-9 rounded-full border-2 border-white/75 bg-white/95 p-0.5 shadow-md shrink-0 flex items-center justify-center overflow-hidden hover:border-emerald-400 transition" title="Club Logo">
         <img id="headerClubLogoImg" src="" alt="Club Logo" class="hidden w-full h-full object-contain rounded-full">
         <span id="headerClubLogoPlaceholder" class="hidden w-full h-full rounded-full bg-slate-900 text-[9px] font-bold text-slate-300 flex flex-col items-center justify-center leading-tight border border-dashed border-slate-500">
           <span>+</span>
@@ -53,51 +53,26 @@
       </button>
     </div>
 
-    <!-- Row 2: Match Format Controls & Coach Profile -->
-    <div class="flex flex-wrap items-center justify-between gap-1.5 text-sm">
-      <div class="flex items-center gap-1.5">
-        <select id="periodCountSelect" onchange="onPeriodCountChange(this.value)" class="bg-slate-700 text-white font-bold px-2 py-1 rounded border border-slate-600 text-xs" title="Match Periods (Quarters, Thirds, or Halves)">
-          <option value="4" selected>4 Qtrs</option>
-          <option value="3">3 Thirds</option>
-          <option value="2">2 Halves</option>
-        </select>
-        <div class="flex items-center bg-slate-700 px-2 py-1 rounded border border-slate-600">
-          <input type="number" id="qtrMins" value="12" min="5" max="45" step="0.5" class="w-10 bg-transparent text-center font-bold text-xs" onchange="onConfigQtrMinsChange(this.value)">
-          <span id="periodUnitLabel" class="text-[10px] text-slate-300">m/q</span>
-        </div>
-        <select id="formationSelect" onchange="onFormationChange(this.value)" class="bg-slate-700 text-white font-bold px-2 py-1 rounded border border-slate-600 text-xs">
-          <option value="5v5">5 v 5</option>
-          <option value="6v6">6 v 6</option>
-          <option value="7v7" selected>7 v 7</option>
-          <option value="9v9">9 v 9</option>
-          <option value="11v11">11 v 11</option>
-        </select>
-      </div>
-      <div class="flex items-center gap-1.5 ml-auto">
-        <button id="uiThemeToggleBtn" type="button" onclick="toggleUiTheme()" aria-pressed="false" title="Try the new Matchday Glass & Turf UI preview" class="text-[10px] bg-slate-700/90 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded border border-emerald-500/40 font-bold flex items-center gap-1 whitespace-nowrap transition">
-          <span>✨</span><span>Glass UI</span>
-        </button>
-        <button onclick="showAuthModal()" id="coachProfileBadge" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold truncate max-w-[130px]">
-          👤 Neil D'Rosario
-        </button>
-      </div>
-    </div>
-
-    <!-- Row 3: Club Team Selector -->
+    <!-- Row 2: Team Selector, Glass/Classic Toggle & Coach Role Badge (Single Non-Wrapping Line) -->
     <div class="flex items-center gap-1.5 pt-1 border-t border-slate-700/70">
-      <span class="text-[11px] font-bold text-slate-400">Team:</span>
-      <select id="teamSelector" onchange="onTeamSelectChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
+      <select id="teamSelector" onchange="onTeamSelectChange(this.value)" aria-label="Select Team" class="bg-slate-900 text-emerald-300 font-bold px-2 py-1 rounded border border-emerald-500/40 text-xs flex-1 min-w-0 truncate">
         <option value="u10_white">🛡️ U10 White (U10)</option>
         <option value="u10_green">🛡️ U10 Green (U10)</option>
       </select>
+      <button id="uiThemeToggleBtn" type="button" onclick="toggleUiTheme()" aria-pressed="false" title="Try the new Matchday Glass & Turf UI preview" class="shrink-0 text-[10px] bg-slate-700/90 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded border border-emerald-500/40 font-bold flex items-center gap-1 whitespace-nowrap transition">
+        <span>✨</span><span>Glass</span>
+      </button>
+      <button onclick="showAuthModal()" id="coachProfileBadge" class="shrink-0 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold truncate max-w-[118px] sm:max-w-[165px]">
+        👤 Neil D'Rosario
+      </button>
     </div>
   </header>
 
   <!-- Main Content Container -->
-  <main class="max-w-md mx-auto p-3">
+  <main class="max-w-md mx-auto p-2.5">
 
     <!-- GLASS & TURF UI PREVIEW NOTICE (Hidden in Classic Mode) -->
-    <div id="glassPreviewBanner" class="hidden mb-3 px-2.5 py-1.5 text-[11px] text-emerald-100 flex items-center justify-between gap-2">
+    <div id="glassPreviewBanner" class="hidden mb-2 px-2.5 py-1 text-[11px] text-emerald-100 flex items-center justify-between gap-2">
       <div class="flex items-center gap-1.5 min-w-0">
         <span>✨</span>
         <span class="truncate"><strong>Glass &amp; Turf Preview</strong> — same live data</span>
@@ -109,101 +84,51 @@
     </div>
 
     <!-- MILESTONE 13 & 15: ACCESS / ROLE / MULTI-CLUB STATUS BANNERS -->
-    <div id="additionalInviteBanner" class="hidden bg-emerald-950/70 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200">
+    <div id="additionalInviteBanner" class="hidden bg-emerald-950/70 border border-emerald-500/50 rounded-lg p-2 mb-2 text-xs text-emerald-200">
       <div id="additionalInviteContent" class="flex items-center justify-between gap-2"></div>
     </div>
 
-    <div id="claimedInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200 flex items-center justify-between gap-2">
+    <div id="claimedInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 rounded-lg p-2 mb-2 text-xs text-emerald-200 flex items-center justify-between gap-2">
       <span id="claimedInviteText" class="font-semibold"></span>
       <button onclick="dismissClaimedInviteNotice()" class="text-emerald-300 hover:text-white font-bold px-1">✕</button>
     </div>
 
-    <div id="viewerReadOnlyBanner" class="hidden bg-slate-800 border border-slate-600 rounded-lg p-2 mb-3 text-[11px] text-slate-300 flex items-center gap-2">
+    <div id="viewerReadOnlyBanner" class="hidden bg-slate-800 border border-slate-600 rounded-lg p-2 mb-2 text-[11px] text-slate-300 flex items-center gap-2">
       <span>👁️</span>
       <span><strong>Read-Only Viewer Mode:</strong> You can view lineups, timer, stats &amp; export Share Sheets, while editing is disabled.</span>
     </div>
 
-    <div id="noTeamsAssignedBanner" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-lg p-2.5 mb-3 text-xs text-amber-200">
+    <div id="noTeamsAssignedBanner" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-lg p-2 mb-2 text-xs text-amber-200">
       ℹ️ You have no teams assigned yet. Ask your Club Admin to assign you to a team or age group.
     </div>
 
-    <!-- CLUB & FIREBASE CLOUD SETTINGS ACCORDION -->
-    <details class="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 mb-3 text-xs">
-      <summary class="font-bold text-slate-300 cursor-pointer flex justify-between items-center">
-        <span>⚙️ Club & Firebase Cloud Settings</span>
-        <span id="configBadge" class="text-[10px] text-emerald-400">Tap to configure</span>
+    <!-- COLLAPSIBLE MATCH DETAILS (Date, Opposition & Saved Matches) -->
+    <details id="matchDetailsAccordion" class="bg-slate-800/90 rounded-lg px-2.5 py-2 border border-slate-700 mb-2 text-xs group">
+      <summary class="cursor-pointer list-none flex items-center justify-between gap-2 select-none">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span>📅</span>
+          <span id="matchDetailsSummaryText" class="font-bold text-slate-200 truncate">Match Details</span>
+        </div>
+        <span class="text-[10px] font-semibold text-emerald-400 shrink-0 group-open:hidden">Edit ▾</span>
+        <span class="text-[10px] font-semibold text-slate-400 shrink-0 hidden group-open:inline">Hide ▴</span>
       </summary>
-      <div class="mt-2.5 pt-2.5 border-t border-slate-700 space-y-3">
-        <!-- Firebase Project Config Paste Box -->
-        <div>
-          <p class="text-[11px] text-slate-300 font-semibold mb-1">🔥 Connect Firebase Project (Firestore + Auth):</p>
-          <p class="text-[10px] text-slate-400 mb-1.5">Paste your Firebase Web App config object or JSON below (or set <code class="text-emerald-400">.env</code> variables):</p>
-          <textarea id="firebaseConfigInput" rows="3" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "..."}' class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-[11px] text-white font-mono"></textarea>
-          <div class="flex justify-between items-center mt-1.5">
-            <button onclick="handleSaveFirebaseConfigUI()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold text-[11px]">Save & Connect Firebase</button>
-            <div class="flex gap-2">
-              <button onclick="showAuthModal()" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded font-bold text-[11px]">Coach Login</button>
-              <button onclick="handleDisconnectFirebaseUI()" class="text-rose-400 underline text-[10px]">Reset</button>
-            </div>
-          </div>
+      <div class="mt-2.5 pt-2.5 border-t border-slate-700/70 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-400">Match Date:</span>
+          <input type="date" id="matchDate" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" onchange="onDateInputChange(this.value)">
         </div>
-
-        <!-- Add New Club Team -->
-        <div id="settingsAddTeamSection" class="pt-2 border-t border-slate-700/70">
-          <p class="text-[11px] text-slate-300 font-semibold mb-1.5">🛡️ Add New Club Team:</p>
-          <div class="flex gap-1.5">
-            <input type="text" id="newTeamNameInput" placeholder="e.g. U10 Blue" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
-            <input type="text" id="newTeamAgeInput" placeholder="U10" value="U10" class="w-14 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-center text-white">
-            <select id="newTeamFormatSelect" class="bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
-              <option value="5v5">5v5</option>
-              <option value="6v6">6v6</option>
-              <option value="7v7" selected>7v7</option>
-              <option value="9v9">9v9</option>
-              <option value="11v11">11v11</option>
-            </select>
-            <button onclick="handleCreateTeamUI()" class="bg-sky-600 hover:bg-sky-500 px-2.5 py-1 rounded font-bold text-[11px]">+ Team</button>
-          </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-400">Opposition:</span>
+          <input type="text" id="oppositionInput" placeholder="e.g. Kill Celtic / Maynooth" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" oninput="onOppositionInputChange(this.value)">
         </div>
-
-        <!-- Shortcut to Dedicated Club Admin Dashboard (Milestone 14) -->
-        <div id="settingsOpenAdminBtn" class="hidden pt-2 border-t border-slate-700/70">
-          <button onclick="switchView('admin')" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5">
-            🛡️ Open Club Admin Dashboard (Coaches, Teams, Invites &amp; Join Code)
-          </button>
-        </div>
-
-        <!-- Multi-Club Hub: Switch / Join / Register New Club (Milestone 15) -->
-        <div class="pt-2 border-t border-slate-700/70">
-          <button onclick="openClubHubModal('create')" class="w-full bg-indigo-600/80 hover:bg-indigo-500 py-1.5 rounded-lg font-bold text-[11px] shadow">
-            🏟️ Switch Club / Join or Register a New Club
-          </button>
-        </div>
-
-        <!-- Migrate Legacy Prototype Data -->
-        <div class="pt-2 border-t border-slate-700/70 flex justify-between items-center">
-          <span class="text-[11px] text-slate-400">Have local data from the Beta Prototype?</span>
-          <button onclick="handleImportLegacyUI()" class="bg-amber-600/80 hover:bg-amber-500 px-2.5 py-1 rounded font-bold text-[11px]">📥 Import Beta Data</button>
+        <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-700/60">
+          <span class="text-xs font-bold text-slate-400">Saved Matches:</span>
+          <select id="matchHistorySelect" onchange="onDateInputChange(this.value)" class="bg-slate-900 text-xs px-2 py-1 rounded border border-slate-600 text-white flex-1 font-semibold">
+            <option value="">-- Jump to Saved Match --</option>
+          </select>
         </div>
       </div>
     </details>
-
-    <!-- MATCH DATE & OPPOSITION BAR -->
-    <div class="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 mb-3 space-y-2">
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-xs font-bold text-slate-400">Match Date:</span>
-        <input type="date" id="matchDate" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" onchange="onDateInputChange(this.value)">
-      </div>
-      <div class="flex items-center justify-between gap-2">
-        <span class="text-xs font-bold text-slate-400">Opposition:</span>
-        <input type="text" id="oppositionInput" placeholder="e.g. Kill Celtic / Maynooth" class="bg-slate-900 text-white px-2.5 py-1 rounded border border-slate-600 text-xs font-semibold flex-1" oninput="onOppositionInputChange(this.value)">
-      </div>
-      <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-700/60">
-        <span class="text-xs font-bold text-slate-400">Saved Matches:</span>
-        <select id="matchHistorySelect" onchange="onDateInputChange(this.value)" class="bg-slate-900 text-xs px-2 py-1 rounded border border-slate-600 text-white flex-1 font-semibold">
-          <option value="">-- Jump to Saved Match --</option>
-        </select>
-      </div>
-    </div>
 
     <!-- REAL-TIME SHARED ROSTER CONFLICT BANNER (Blueprint Section 4.2) -->
     <div id="conflictWarningBanner" class="hidden bg-amber-500/20 border border-amber-500/60 rounded-lg p-2.5 mb-3 text-xs text-amber-200">
@@ -214,7 +139,7 @@
     <!-- VIEW 1: MATCH PITCH -->
     <div id="view-pitch">
       <!-- Live Sideline Match Timer & 50% Sub Alert Bar (Milestone 9) -->
-      <div id="timerCard" class="bg-slate-800/95 border border-slate-700 rounded-lg p-2.5 mb-2.5 shadow">
+      <div id="timerCard" class="bg-slate-800/95 border border-slate-700 rounded-lg p-2 mb-2 shadow">
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span id="timerPeriodBadge" class="text-xs font-bold bg-slate-900 text-emerald-400 px-2 py-0.5 rounded border border-slate-700">⏱️ Q1</span>
@@ -256,7 +181,7 @@
       </div>
 
       <!-- Per-Period Tactical Shape Bar (Milestone 6 & 7) -->
-      <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-2 mb-2.5 flex items-center justify-between gap-2 text-xs">
+      <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-1.5 mb-2 flex items-center justify-between gap-2 text-xs">
         <span id="tacticalShapeQuarterLabel" class="font-bold text-slate-300">Q1 Formation:</span>
         <select id="tacticalShapeSelect" onchange="onTacticalShapeChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
           <option value="GK-2-3-1">📐 GK-2-3-1</option>
@@ -267,7 +192,7 @@
       </div>
 
       <!-- Action Toolbar (Auto-Fill, Swaps & Match Events — Milestones 11 & 12) -->
-      <div id="pitchActionToolbar" class="space-y-1.5 mb-3">
+      <div id="pitchActionToolbar" class="space-y-1 mb-2">
         <div class="grid grid-cols-3 gap-1.5">
           <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
             🪄 Auto-Fair
@@ -340,9 +265,35 @@
       </div>
 
       <!-- Bottom Actions -->
-      <div class="flex gap-2 pb-6">
+      <div class="flex gap-2 pb-3">
         <button id="copyPrevQtrBtn" onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
         <button onclick="exportTeamSheet()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
+      </div>
+
+      <!-- Custom Team Configuration (Moved below pitch actions; overrides Admin defaults) -->
+      <div id="customTeamConfigCard" class="bg-slate-800/90 border border-slate-700 rounded-lg p-3 mb-6 space-y-2">
+        <div>
+          <h3 class="text-xs font-bold text-slate-200">⚙️ Custom Team Configuration</h3>
+          <p class="text-[11px] text-slate-400">Override this team's default match periods, period length, or format for this fixture.</p>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <select id="periodCountSelect" onchange="onPeriodCountChange(this.value)" class="bg-slate-900 text-white font-bold px-2 py-1.5 rounded border border-slate-600 text-xs" title="Match Periods (Quarters, Thirds, or Halves)">
+            <option value="4" selected>4 Qtrs</option>
+            <option value="3">3 Thirds</option>
+            <option value="2">2 Halves</option>
+          </select>
+          <div class="flex items-center justify-center bg-slate-900 px-2 py-1.5 rounded border border-slate-600">
+            <input type="number" id="qtrMins" value="12" min="5" max="45" step="0.5" class="w-11 bg-transparent text-center font-bold text-xs text-white" onchange="onConfigQtrMinsChange(this.value)">
+            <span id="periodUnitLabel" class="text-[10px] text-slate-300">m/q</span>
+          </div>
+          <select id="formationSelect" onchange="onFormationChange(this.value)" class="bg-slate-900 text-white font-bold px-2 py-1.5 rounded border border-slate-600 text-xs">
+            <option value="5v5">5 v 5</option>
+            <option value="6v6">6 v 6</option>
+            <option value="7v7" selected>7 v 7</option>
+            <option value="9v9">9 v 9</option>
+            <option value="11v11">11 v 11</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -490,6 +441,66 @@
       </div>
 
       <div id="adminDashboardBody" class="space-y-3"></div>
+
+      <!-- ADMIN-ONLY: CLUB & FIREBASE CLOUD SETTINGS ACCORDION -->
+      <details id="clubSettingsAccordion" class="hidden bg-slate-800/90 rounded-lg p-2.5 border border-slate-700 text-xs">
+        <summary class="font-bold text-slate-300 cursor-pointer flex justify-between items-center">
+          <span>⚙️ Club &amp; Firebase Cloud Settings</span>
+          <span id="configBadge" class="text-[10px] text-emerald-400">Tap to configure</span>
+        </summary>
+        <div class="mt-2.5 pt-2.5 border-t border-slate-700 space-y-3">
+          <!-- Firebase Project Config Paste Box -->
+          <div>
+            <p class="text-[11px] text-slate-300 font-semibold mb-1">🔥 Connect Firebase Project (Firestore + Auth):</p>
+            <p class="text-[10px] text-slate-400 mb-1.5">Paste your Firebase Web App config object or JSON below (or set <code class="text-emerald-400">.env</code> variables):</p>
+            <textarea id="firebaseConfigInput" rows="3" placeholder='{"apiKey": "...", "authDomain": "...", "projectId": "..."}' class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-[11px] text-white font-mono"></textarea>
+            <div class="flex justify-between items-center mt-1.5">
+              <button onclick="handleSaveFirebaseConfigUI()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-bold text-[11px]">Save &amp; Connect Firebase</button>
+              <div class="flex gap-2">
+                <button onclick="showAuthModal()" class="bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 rounded font-bold text-[11px]">Coach Login</button>
+                <button onclick="handleDisconnectFirebaseUI()" class="text-rose-400 underline text-[10px]">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add New Club Team -->
+          <div id="settingsAddTeamSection" class="pt-2 border-t border-slate-700/70">
+            <p class="text-[11px] text-slate-300 font-semibold mb-1.5">🛡️ Add New Club Team:</p>
+            <div class="flex gap-1.5">
+              <input type="text" id="newTeamNameInput" placeholder="e.g. U10 Blue" class="flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+              <input type="text" id="newTeamAgeInput" placeholder="U10" value="U10" class="w-14 bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-center text-white">
+              <select id="newTeamFormatSelect" class="bg-slate-900 px-2 py-1 rounded border border-slate-600 text-[11px] text-white">
+                <option value="5v5">5v5</option>
+                <option value="6v6">6v6</option>
+                <option value="7v7" selected>7v7</option>
+                <option value="9v9">9v9</option>
+                <option value="11v11">11v11</option>
+              </select>
+              <button onclick="handleCreateTeamUI()" class="bg-sky-600 hover:bg-sky-500 px-2.5 py-1 rounded font-bold text-[11px]">+ Team</button>
+            </div>
+          </div>
+
+          <!-- Shortcut to Dedicated Club Admin Dashboard (Milestone 14) -->
+          <div id="settingsOpenAdminBtn" class="hidden pt-2 border-t border-slate-700/70">
+            <button onclick="switchView('admin')" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1.5">
+              🛡️ Open Club Admin Dashboard (Coaches, Teams, Invites &amp; Join Code)
+            </button>
+          </div>
+
+          <!-- Multi-Club Hub: Switch / Join / Register New Club (Milestone 15) -->
+          <div class="pt-2 border-t border-slate-700/70">
+            <button onclick="openClubHubModal('create')" class="w-full bg-indigo-600/80 hover:bg-indigo-500 py-1.5 rounded-lg font-bold text-[11px] shadow">
+              🏟️ Switch Club / Join or Register a New Club
+            </button>
+          </div>
+
+          <!-- Migrate Legacy Prototype Data -->
+          <div class="pt-2 border-t border-slate-700/70 flex justify-between items-center">
+            <span class="text-[11px] text-slate-400">Have local data from the Beta Prototype?</span>
+            <button onclick="handleImportLegacyUI()" class="bg-amber-600/80 hover:bg-amber-500 px-2.5 py-1 rounded font-bold text-[11px]">📥 Import Beta Data</button>
+          </div>
+        </div>
+      </details>
     </div>
 
   </main>

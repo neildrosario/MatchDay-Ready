@@ -63,7 +63,7 @@ function updateThemeControlsUI(theme) {
       btn.innerHTML = '<span>↩️</span><span>Classic</span>';
       btn.title = 'Switch back to Classic UI';
     } else {
-      btn.innerHTML = '<span>✨</span><span>Glass UI</span>';
+      btn.innerHTML = '<span>✨</span><span>Glass</span>';
       btn.title = 'Try the new Matchday Glass & Turf UI preview';
     }
   }

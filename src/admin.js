@@ -63,7 +63,12 @@ export function setAdminMemberSearch(q) {
 export function renderAdminNavBadge() {
   const navBtn = document.getElementById('nav-admin');
   const openShortcut = document.getElementById('settingsOpenAdminBtn');
+  const clubSettingsAccordion = document.getElementById('clubSettingsAccordion');
   const isAdmin = isClubAdmin(appState.userProfile);
+
+  if (clubSettingsAccordion) {
+    clubSettingsAccordion.classList.toggle('hidden', !isAdmin);
+  }
 
   if (navBtn) {
     navBtn.classList.toggle('hidden', !isAdmin);

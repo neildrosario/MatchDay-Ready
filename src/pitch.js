@@ -127,7 +127,7 @@ export function renderHeaderAndMatchBar() {
   if (tabsGrid) {
     const colsClass =
       periodCount === 2 ? 'grid-cols-2' : periodCount === 3 ? 'grid-cols-3' : 'grid-cols-4';
-    tabsGrid.className = `grid ${colsClass} gap-2 mb-2.5`;
+    tabsGrid.className = `grid ${colsClass} gap-1.5 mb-2`;
     tabsGrid.innerHTML = periods
       .map(pNum => {
         const pLineup = getQuarterLineupDoc(pNum);
@@ -156,6 +156,13 @@ export function renderHeaderAndMatchBar() {
   const oppInput = document.getElementById('oppositionInput');
   if (oppInput && document.activeElement !== oppInput) {
     oppInput.value = match.opposition || '';
+  }
+
+  const summaryTextEl = document.getElementById('matchDetailsSummaryText');
+  if (summaryTextEl) {
+    const dateLabel = appState.selectedDate || 'Match Date';
+    const oppClean = (match.opposition || '').trim();
+    summaryTextEl.innerText = oppClean ? `${dateLabel} · vs ${oppClean}` : `${dateLabel} · Match Details`;
   }
 
   // Enforce Read-Only Viewer controls on Match Header & Pitch Toolbars (Milestone 13)
