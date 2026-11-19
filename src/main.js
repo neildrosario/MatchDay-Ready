@@ -99,12 +99,22 @@ import {
   setAdminMemberRoleFilter,
   setAdminMemberSearch
 } from './admin.js';
-import { isClubAdmin } from './permissions.js';
+import {
+  isClubAdmin,
+  canViewSplitterTab,
+  canViewStatsTab
+} from './permissions.js';
 
 let currentView = 'pitch';
 
 export function switchView(view) {
   if (view === 'admin' && !isClubAdmin(appState.userProfile)) {
+    view = 'pitch';
+  }
+  if (view === 'splitter' && !canViewSplitterTab(appState.userProfile)) {
+    view = 'pitch';
+  }
+  if (view === 'stats' && !canViewStatsTab(appState.userProfile)) {
     view = 'pitch';
   }
   currentView = view;
@@ -252,6 +262,14 @@ document.addEventListener('DOMContentLoaded', () => {
     renderMatchTimer();
     renderAdminCoachesPanel();
     if (currentView === 'admin' && !isClubAdmin(appState.userProfile)) {
+      switchView('pitch');
+      return;
+    }
+    if (currentView === 'splitter' && !canViewSplitterTab(appState.userProfile)) {
+      switchView('pitch');
+      return;
+    }
+    if (currentView === 'stats' && !canViewStatsTab(appState.userProfile)) {
       switchView('pitch');
       return;
     }

@@ -8,6 +8,8 @@ import {
   isClubAdmin,
   isAgeGroupLead,
   isViewer,
+  canViewSplitterTab,
+  canViewStatsTab,
   getClubAgeGroups,
   getAccessibleTeamsForProfile,
   canEditTeam,
@@ -193,5 +195,32 @@ describe('4-Role RBAC & Access Control (src/permissions.js)', () => {
     assert.equal(canRemoveUser(ADMIN, ADMIN_2, twoAdminRoster).ok, true);
     // Still cannot remove self
     assert.equal(canRemoveUser(ADMIN, ADMIN, twoAdminRoster).ok, false);
+  });
+
+  it('controls Splitter and Stats tab visibility per staff member (default ON for all coaches)', () => {
+    // Default ON when flags are omitted (legacy / standard coaches)
+    assert.equal(canViewSplitterTab(COACH_WHITE), true);
+    assert.equal(canViewStatsTab(COACH_WHITE), true);
+    assert.equal(canViewSplitterTab(VIEWER_WHITE), true);
+    assert.equal(canViewStatsTab(VIEWER_WHITE), true);
+
+    // Explicit false hides respective tabs for non-admin staff
+    const restrictedCoach = { ...COACH_WHITE, canViewSplitter: false, canViewStats: false };
+    assert.equal(canViewSplitterTab(restrictedCoach), false);
+    assert.equal(canViewStatsTab(restrictedCoach), false);
+
+    const pitchAndStatsOnly = { ...COACH_WHITE, canViewSplitter: false, canViewStats: true };
+    assert.equal(canViewSplitterTab(pitchAndStatsOnly), false);
+    assert.equal(canViewStatsTab(pitchAndStatsOnly), true);
+
+    // Active admins always retain full access
+    assert.equal(canViewSplitterTab({ ...ADMIN, canViewSplitter: false }), true);
+    assert.equal(canViewStatsTab({ ...ADMIN, canViewStats: false }), true);
+
+    // Suspended or null profiles are blocked
+    assert.equal(canViewSplitterTab(SUSPENDED_COACH), false);
+    assert.equal(canViewStatsTab(SUSPENDED_COACH), false);
+    assert.equal(canViewSplitterTab(null), false);
+    assert.equal(canViewStatsTab(null), false);
   });
 });

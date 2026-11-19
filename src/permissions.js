@@ -68,6 +68,18 @@ export function isViewer(profile) {
   return Boolean(profile) && normalizeRole(profile.role) === 'viewer';
 }
 
+export function canViewSplitterTab(profile) {
+  if (!isProfileActive(profile)) return false;
+  if (profile.role === 'admin') return true;
+  return profile.canViewSplitter !== false;
+}
+
+export function canViewStatsTab(profile) {
+  if (!isProfileActive(profile)) return false;
+  if (profile.role === 'admin') return true;
+  return profile.canViewStats !== false;
+}
+
 export function getClubAgeGroups(allClubTeams = []) {
   const set = new Set();
   (allClubTeams || []).forEach(t => {

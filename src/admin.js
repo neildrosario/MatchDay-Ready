@@ -14,6 +14,7 @@ import {
   updateCoachRole,
   toggleCoachTeamAssignment,
   toggleCoachAgeGroupAssignment,
+  toggleCoachFeatureAccess,
   toggleCoachStatus,
   removeCoachProfile,
   approveJoinRequest,
@@ -22,6 +23,8 @@ import {
 } from './db.js';
 import {
   isClubAdmin,
+  canViewSplitterTab,
+  canViewStatsTab,
   getClubAgeGroups,
   getRoleMeta
 } from './permissions.js';
@@ -62,10 +65,18 @@ export function setAdminMemberSearch(q) {
 
 export function renderAdminNavBadge() {
   const navBtn = document.getElementById('nav-admin');
+  const navSplitter = document.getElementById('nav-splitter');
+  const navStats = document.getElementById('nav-stats');
   const openShortcut = document.getElementById('settingsOpenAdminBtn');
   const clubSettingsAccordion = document.getElementById('clubSettingsAccordion');
   const isAdmin = isClubAdmin(appState.userProfile);
 
+  if (navSplitter) {
+    navSplitter.classList.toggle('hidden', !canViewSplitterTab(appState.userProfile));
+  }
+  if (navStats) {
+    navStats.classList.toggle('hidden', !canViewStatsTab(appState.userProfile));
+  }
   if (clubSettingsAccordion) {
     clubSettingsAccordion.classList.toggle('hidden', !isAdmin);
   }
@@ -475,6 +486,17 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
                   </div>
                   <div class="flex flex-wrap gap-1">${teamCbs}</div>
                   ${agCbs ? `<div class="flex flex-wrap items-center gap-1"><span class="text-[9px] text-sky-400 font-bold">Lead Age Groups:</span>${agCbs}</div>` : ''}
+                  <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span class="text-[9px] text-slate-400 font-bold uppercase">Tabs:</span>
+                    <label class="flex items-center gap-1 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700 cursor-pointer">
+                      <input type="checkbox" checked class="req-splitter-cb-${escapeHtml(r.requestId)} rounded bg-slate-800 border-slate-600 text-emerald-500">
+                      <span>📋 Splitter</span>
+                    </label>
+                    <label class="flex items-center gap-1 text-[10px] bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700 cursor-pointer">
+                      <input type="checkbox" checked class="req-stats-cb-${escapeHtml(r.requestId)} rounded bg-slate-800 border-slate-600 text-emerald-500">
+                      <span>📊 Stats</span>
+                    </label>
+                  </div>
                   <div class="flex gap-1.5 pt-1">
                     <button data-admin-approve="${escapeHtml(r.requestId)}" class="admin-approve-btn flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] py-1.5 rounded">✓ Approve Access</button>
                     <button data-admin-reject="${escapeHtml(r.requestId)}" class="admin-reject-btn bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] px-3 py-1.5 rounded">✕ Decline</button>
@@ -497,6 +519,10 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
                 : inv.role === 'lead'
                 ? `Age groups: ${(inv.assignedAgeGroups || []).join(', ') || 'None'}`
                 : `${(inv.assignedTeamIds || []).length} team(s)`;
+            const restrictedTabs = [];
+            if (inv.role !== 'admin' && inv.canViewSplitter === false) restrictedTabs.push('No Splitter');
+            if (inv.role !== 'admin' && inv.canViewStats === false) restrictedTabs.push('No Stats');
+            const tabNote = restrictedTabs.length > 0 ? ` • ${restrictedTabs.join(', ')}` : '';
             return `
               <div class="flex items-center justify-between gap-2 bg-slate-900/80 px-2.5 py-2 rounded border border-slate-700 text-xs">
                 <div class="min-w-0">
@@ -504,7 +530,7 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
                     <span class="font-bold text-white truncate">${escapeHtml(inv.displayName || inv.email)}</span>
                     <span class="text-[9px] px-1.5 py-0.5 rounded border ${meta.badgeClass} font-bold">${meta.short}</span>
                   </div>
-                  <div class="text-[10px] text-slate-400 truncate">${escapeHtml(inv.email)} • ${escapeHtml(scopeSummary)}</div>
+                  <div class="text-[10px] text-slate-400 truncate">${escapeHtml(inv.email)} • ${escapeHtml(scopeSummary)}${escapeHtml(tabNote)}</div>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
                   <button data-admin-copy-inv="${escapeHtml(inv.inviteId)}" class="admin-copy-inv-btn text-[10px] bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-600 px-2 py-1 rounded font-semibold">📋 Copy</button>
@@ -598,8 +624,27 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
                 ${agPills}
                 ${
                   u.role !== 'admin'
-                    ? `<div class="flex flex-wrap gap-1 pt-1.5 border-t border-slate-800">${teamPills}</div>`
-                    : `<div class="text-[10px] text-purple-300/80 pt-1 border-t border-slate-800">Full access across all ${teams.length} club teams</div>`
+                    ? `<div class="flex flex-wrap gap-1 pt-1.5 border-t border-slate-800">${teamPills}</div>
+                       <div class="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-800/70">
+                         <span class="text-[9px] text-slate-400 font-bold uppercase">Tabs:</span>
+                         <button data-adm-feat-uid="${escapeHtml(u.uid)}" data-adm-feat-key="canViewSplitter"
+                           class="adm-feat-pill px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                             u.canViewSplitter !== false
+                               ? 'bg-emerald-600/25 border-emerald-500/60 text-emerald-200'
+                               : 'bg-slate-800 border-slate-700 text-slate-500 line-through'
+                           }">
+                           ${u.canViewSplitter !== false ? '✓ ' : '✕ '}📋 Splitter
+                         </button>
+                         <button data-adm-feat-uid="${escapeHtml(u.uid)}" data-adm-feat-key="canViewStats"
+                           class="adm-feat-pill px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                             u.canViewStats !== false
+                               ? 'bg-emerald-600/25 border-emerald-500/60 text-emerald-200'
+                               : 'bg-slate-800 border-slate-700 text-slate-500 line-through'
+                           }">
+                           ${u.canViewStats !== false ? '✓ ' : '✕ '}📊 Stats
+                         </button>
+                       </div>`
+                    : `<div class="text-[10px] text-purple-300/80 pt-1 border-t border-slate-800">Full access across all ${teams.length} club teams &amp; tabs</div>`
                 }
               </div>
             `;
@@ -683,6 +728,19 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
             </div>`
           : ''
       }
+      <div>
+        <div class="text-[10px] text-slate-400 mb-1">Feature Visibility (Defaults On for All Coaches):</div>
+        <div class="flex flex-wrap gap-2">
+          <label class="flex items-center gap-1.5 text-[11px] bg-slate-900 px-2.5 py-1 rounded border border-slate-700 cursor-pointer">
+            <input type="checkbox" id="admInvCanViewSplitter" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500">
+            <span>📋 Show Squad Splitter</span>
+          </label>
+          <label class="flex items-center gap-1.5 text-[11px] bg-slate-900 px-2.5 py-1 rounded border border-slate-700 cursor-pointer">
+            <input type="checkbox" id="admInvCanViewStats" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500">
+            <span>📊 Show Squad &amp; Stats</span>
+          </label>
+        </div>
+      </div>
       <button id="admSendInviteBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded font-bold text-xs shadow">
         + Pre-Authorize Coach &amp; Create Invite
       </button>
@@ -724,6 +782,8 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
       const checkedAgs = Array.from(container.querySelectorAll(`.req-ag-cb-${CSS.escape(reqId)}:checked`)).map(
         cb => cb.value
       );
+      const canViewSplitter = container.querySelector(`.req-splitter-cb-${CSS.escape(reqId)}`)?.checked !== false;
+      const canViewStats = container.querySelector(`.req-stats-cb-${CSS.escape(reqId)}`)?.checked !== false;
 
       const fallbackTeams = checkedTeams.length > 0 ? checkedTeams : [appState.selectedTeamId].filter(Boolean);
       const fallbackAgs = checkedAgs.length > 0 ? checkedAgs : [getSelectedTeam()?.ageGroup].filter(Boolean);
@@ -733,7 +793,9 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
           requestId: reqId,
           role,
           assignedTeamIds: role === 'coach' || role === 'viewer' ? fallbackTeams : checkedTeams,
-          assignedAgeGroups: role === 'lead' ? fallbackAgs : []
+          assignedAgeGroups: role === 'lead' ? fallbackAgs : [],
+          canViewSplitter,
+          canViewStats
         });
         alert(`✅ Approved as ${getRoleMeta(role).label}! Their phone will unlock automatically.`);
       } catch (e) {
@@ -760,6 +822,8 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
 
     const assignedTeamIds = Array.from(container.querySelectorAll('.adm-inv-team-cb:checked')).map(cb => cb.value);
     const assignedAgeGroups = Array.from(container.querySelectorAll('.adm-inv-ag-cb:checked')).map(cb => cb.value);
+    const canViewSplitter = container.querySelector('#admInvCanViewSplitter')?.checked !== false;
+    const canViewStats = container.querySelector('#admInvCanViewStats')?.checked !== false;
 
     if (role === 'lead' && assignedAgeGroups.length === 0 && ageGroups.length > 0) {
       assignedAgeGroups.push(getSelectedTeam()?.ageGroup || ageGroups[0]);
@@ -771,7 +835,9 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
         displayName,
         role,
         assignedTeamIds,
-        assignedAgeGroups
+        assignedAgeGroups,
+        canViewSplitter,
+        canViewStats
       });
       alert(`✅ Invite ready for ${inv.displayName} (${inv.email}) as ${getRoleMeta(inv.role).label}!`);
     } catch (e) {
@@ -825,6 +891,15 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
   container.querySelectorAll('.adm-ag-pill').forEach(btn => {
     btn.addEventListener('click', async () => {
       await toggleCoachAgeGroupAssignment(btn.getAttribute('data-adm-luid'), btn.getAttribute('data-adm-ag'));
+    });
+  });
+
+  container.querySelectorAll('.adm-feat-pill').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await toggleCoachFeatureAccess(
+        btn.getAttribute('data-adm-feat-uid'),
+        btn.getAttribute('data-adm-feat-key')
+      );
     });
   });
 

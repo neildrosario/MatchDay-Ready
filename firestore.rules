@@ -81,32 +81,42 @@ service cloud.firestore {
       return role in ['admin', 'lead', 'coach', 'viewer'];
     }
 
+    function boolFlagDefaultTrue(obj, key) {
+      return !(key in obj) || obj[key] == true;
+    }
+
     function isValidInviteClaim(newUser) {
+      let inv = get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data;
       return newUser.claimedInviteId is string
         && exists(/databases/$(database)/documents/invites/$(newUser.claimedInviteId))
-        && get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.status == 'pending'
+        && inv.status == 'pending'
         && authEmailLower() != ''
-        && get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.email == authEmailLower()
-        && newUser.clubId == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.clubId
-        && newUser.role == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.role
+        && inv.email == authEmailLower()
+        && newUser.clubId == inv.clubId
+        && newUser.role == inv.role
         && newUser.status == 'active'
-        && newUser.assignedTeamIds == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.assignedTeamIds
-        && newUser.assignedAgeGroups == get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data.assignedAgeGroups;
+        && newUser.assignedTeamIds == inv.assignedTeamIds
+        && newUser.assignedAgeGroups == inv.assignedAgeGroups
+        && boolFlagDefaultTrue(newUser, 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
+        && boolFlagDefaultTrue(newUser, 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'));
     }
 
     // Multi-club: switching active club using an already-authorized membership entry
     function isValidClubSwitch(userId) {
       let nextClub = request.resource.data.clubId;
+      let target = resource.data.clubMemberships[nextClub];
       return request.auth.uid == userId
         && 'clubMemberships' in resource.data
         && nextClub in resource.data.clubMemberships
         && request.resource.data.clubMemberships == resource.data.clubMemberships
-        && request.resource.data.role == resource.data.clubMemberships[nextClub].role
-        && request.resource.data.status == resource.data.clubMemberships[nextClub].status
-        && request.resource.data.assignedTeamIds == resource.data.clubMemberships[nextClub].assignedTeamIds
-        && request.resource.data.assignedAgeGroups == resource.data.clubMemberships[nextClub].assignedAgeGroups
+        && request.resource.data.role == target.role
+        && request.resource.data.status == target.status
+        && request.resource.data.assignedTeamIds == target.assignedTeamIds
+        && request.resource.data.assignedAgeGroups == target.assignedAgeGroups
+        && boolFlagDefaultTrue(request.resource.data, 'canViewSplitter') == boolFlagDefaultTrue(target, 'canViewSplitter')
+        && boolFlagDefaultTrue(request.resource.data, 'canViewStats') == boolFlagDefaultTrue(target, 'canViewStats')
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['clubId', 'role', 'status', 'assignedTeamIds', 'assignedAgeGroups', 'updatedAt']);
+          .hasOnly(['clubId', 'role', 'status', 'assignedTeamIds', 'assignedAgeGroups', 'canViewSplitter', 'canViewStats', 'updatedAt']);
     }
 
     // Multi-club: existing user registering a brand-new club that does not exist yet
@@ -153,6 +163,8 @@ service cloud.firestore {
         && request.resource.data.status == 'active'
         && request.resource.data.assignedTeamIds == inv.assignedTeamIds
         && request.resource.data.assignedAgeGroups == inv.assignedAgeGroups
+        && boolFlagDefaultTrue(request.resource.data, 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
+        && boolFlagDefaultTrue(request.resource.data, 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'))
         && 'clubMemberships' in request.resource.data
         && nextClub in request.resource.data.clubMemberships
         && request.resource.data.clubMemberships[nextClub].clubId == nextClub
@@ -160,6 +172,8 @@ service cloud.firestore {
         && request.resource.data.clubMemberships[nextClub].status == 'active'
         && request.resource.data.clubMemberships[nextClub].assignedTeamIds == inv.assignedTeamIds
         && request.resource.data.clubMemberships[nextClub].assignedAgeGroups == inv.assignedAgeGroups
+        && boolFlagDefaultTrue(request.resource.data.clubMemberships[nextClub], 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
+        && boolFlagDefaultTrue(request.resource.data.clubMemberships[nextClub], 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'))
         && (
           (
             'clubMemberships' in resource.data

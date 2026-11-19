@@ -267,7 +267,9 @@ function buildSeededMembershipsForUser(existingProfile) {
         : [],
       assignedAgeGroups: Array.isArray(existingProfile.assignedAgeGroups)
         ? [...existingProfile.assignedAgeGroups]
-        : []
+        : [],
+      canViewSplitter: existingProfile.canViewSplitter !== false,
+      canViewStats: existingProfile.canViewStats !== false
     };
   }
   return base;
@@ -414,7 +416,9 @@ function projectUserForClub(userDoc, clubId) {
     role: m.role || userDoc.role,
     status: m.status || 'active',
     assignedTeamIds: Array.isArray(m.assignedTeamIds) ? m.assignedTeamIds : [],
-    assignedAgeGroups: Array.isArray(m.assignedAgeGroups) ? m.assignedAgeGroups : []
+    assignedAgeGroups: Array.isArray(m.assignedAgeGroups) ? m.assignedAgeGroups : [],
+    canViewSplitter: m.canViewSplitter !== false,
+    canViewStats: m.canViewStats !== false
   };
 }
 
@@ -572,6 +576,8 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
         const claimedRole = normalizeRole(inv.role || 'coach');
         const claimedTeams = Array.isArray(inv.assignedTeamIds) ? inv.assignedTeamIds : [];
         const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? inv.assignedAgeGroups : [];
+        const claimedSplitter = claimedRole === 'admin' ? true : inv.canViewSplitter !== false;
+        const claimedStats = claimedRole === 'admin' ? true : inv.canViewStats !== false;
         const newProfile = {
           uid: firebaseUser.uid,
           email: cleanEmail,
@@ -581,6 +587,8 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
           clubId: inv.clubId,
           assignedTeamIds: claimedTeams,
           assignedAgeGroups: claimedGroups,
+          canViewSplitter: claimedSplitter,
+          canViewStats: claimedStats,
           memberClubIds: [inv.clubId],
           clubMemberships: {
             [inv.clubId]: {
@@ -589,7 +597,9 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
               role: claimedRole,
               status: 'active',
               assignedTeamIds: claimedTeams,
-              assignedAgeGroups: claimedGroups
+              assignedAgeGroups: claimedGroups,
+              canViewSplitter: claimedSplitter,
+              canViewStats: claimedStats
             }
           },
           claimedInviteId: inv.inviteId,
@@ -1433,7 +1443,9 @@ export async function inviteOrPreAuthorizeCoach({
   displayName,
   role = 'coach',
   assignedTeamIds = [],
-  assignedAgeGroups = []
+  assignedAgeGroups = [],
+  canViewSplitter = true,
+  canViewStats = true
 }) {
   const cleanEmail = (email || '').trim().toLowerCase();
   if (!cleanEmail) throw new Error('Coach email is required.');
@@ -1460,6 +1472,9 @@ export async function inviteOrPreAuthorizeCoach({
       ? Array.from(new Set(assignedAgeGroups.filter(Boolean)))
       : [];
 
+  const allowSplitter = safeRole === 'admin' ? true : canViewSplitter !== false;
+  const allowStats = safeRole === 'admin' ? true : canViewStats !== false;
+
   const inviteDoc = {
     inviteId,
     clubId,
@@ -1469,6 +1484,8 @@ export async function inviteOrPreAuthorizeCoach({
     role: safeRole,
     assignedTeamIds: Array.from(new Set(defaultTeams)),
     assignedAgeGroups: cleanAgeGroups,
+    canViewSplitter: allowSplitter,
+    canViewStats: allowStats,
     status: 'pending',
     invitedBy: appState.userProfile?.uid || appState.currentUser?.uid || 'local_coach_1',
     createdAt: new Date().toISOString()
@@ -1514,7 +1531,9 @@ async function writeClubMemberPatch(uid, memberFieldsPatch) {
     role: normalizeRole(user.role || 'coach'),
     status: user.status || 'active',
     assignedTeamIds: Array.isArray(user.assignedTeamIds) ? [...user.assignedTeamIds] : [],
-    assignedAgeGroups: Array.isArray(user.assignedAgeGroups) ? [...user.assignedAgeGroups] : []
+    assignedAgeGroups: Array.isArray(user.assignedAgeGroups) ? [...user.assignedAgeGroups] : [],
+    canViewSplitter: user.canViewSplitter !== false,
+    canViewStats: user.canViewStats !== false
   };
   const nextClubEntry = {
     ...prevClubEntry,
@@ -1603,6 +1622,14 @@ export async function toggleCoachAgeGroupAssignment(uid, ageGroup) {
     current.add(ageGroup);
   }
   await writeClubMemberPatch(uid, { assignedAgeGroups: Array.from(current) });
+}
+
+export async function toggleCoachFeatureAccess(uid, featureKey) {
+  if (featureKey !== 'canViewSplitter' && featureKey !== 'canViewStats') return;
+  const user = appState.allClubUsers.find(u => u.uid === uid);
+  if (!user) return;
+  const currentlyEnabled = user[featureKey] !== false;
+  await writeClubMemberPatch(uid, { [featureKey]: !currentlyEnabled });
 }
 
 export async function toggleCoachStatus(uid) {
@@ -1753,7 +1780,9 @@ export async function approveJoinRequest({
   requestId,
   role = 'coach',
   assignedTeamIds = [],
-  assignedAgeGroups = []
+  assignedAgeGroups = [],
+  canViewSplitter = true,
+  canViewStats = true
 }) {
   const req = appState.allClubJoinRequests.find(r => r.requestId === requestId);
   if (!req) throw new Error('Join request not found.');
@@ -1778,6 +1807,9 @@ export async function approveJoinRequest({
       ? Array.from(new Set(assignedAgeGroups.filter(Boolean)))
       : [];
 
+  const allowSplitter = safeRole === 'admin' ? true : canViewSplitter !== false;
+  const allowStats = safeRole === 'admin' ? true : canViewStats !== false;
+
   const clubName = appState.club?.shortName || appState.club?.name || clubId;
   const dedupedTeams = Array.from(new Set(finalTeams));
   const membershipEntry = {
@@ -1786,7 +1818,9 @@ export async function approveJoinRequest({
     role: safeRole,
     status: 'active',
     assignedTeamIds: dedupedTeams,
-    assignedAgeGroups: finalAgeGroups
+    assignedAgeGroups: finalAgeGroups,
+    canViewSplitter: allowSplitter,
+    canViewStats: allowStats
   };
 
   const newUserDoc = {
@@ -1798,6 +1832,8 @@ export async function approveJoinRequest({
     clubId,
     assignedTeamIds: dedupedTeams,
     assignedAgeGroups: finalAgeGroups,
+    canViewSplitter: allowSplitter,
+    canViewStats: allowStats,
     memberClubIds: [clubId],
     clubMemberships: {
       [clubId]: membershipEntry
@@ -2085,6 +2121,8 @@ export async function switchActiveClub(targetClubId) {
     status: target.status || 'active',
     assignedTeamIds: Array.isArray(target.assignedTeamIds) ? [...target.assignedTeamIds] : [],
     assignedAgeGroups: Array.isArray(target.assignedAgeGroups) ? [...target.assignedAgeGroups] : [],
+    canViewSplitter: target.canViewSplitter !== false,
+    canViewStats: target.canViewStats !== false,
     updatedAt: new Date().toISOString()
   };
 
@@ -2125,13 +2163,17 @@ export async function claimAdditionalInvite(inviteId) {
   const claimedRole = normalizeRole(inv.role || 'coach');
   const claimedTeams = Array.isArray(inv.assignedTeamIds) ? [...inv.assignedTeamIds] : [];
   const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? [...inv.assignedAgeGroups] : [];
+  const claimedSplitter = claimedRole === 'admin' ? true : inv.canViewSplitter !== false;
+  const claimedStats = claimedRole === 'admin' ? true : inv.canViewStats !== false;
   const newEntry = {
     clubId: inv.clubId,
     clubName: inv.clubName || inv.clubId,
     role: claimedRole,
     status: 'active',
     assignedTeamIds: claimedTeams,
-    assignedAgeGroups: claimedGroups
+    assignedAgeGroups: claimedGroups,
+    canViewSplitter: claimedSplitter,
+    canViewStats: claimedStats
   };
 
   const mergedMemberships = {
@@ -2148,6 +2190,8 @@ export async function claimAdditionalInvite(inviteId) {
     status: 'active',
     assignedTeamIds: claimedTeams,
     assignedAgeGroups: claimedGroups,
+    canViewSplitter: claimedSplitter,
+    canViewStats: claimedStats,
     claimedInviteId: inv.inviteId,
     clubMemberships: mergedMemberships,
     memberClubIds: mergedClubIds,
