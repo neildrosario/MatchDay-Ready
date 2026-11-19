@@ -296,8 +296,11 @@ export function renderSquadSplitter() {
             ? assignedPlayers
                 .map(p => {
                   const name = getPlayerDisplayName(p);
-                  const role = p.preferredGroup && ROLE_TAG[p.preferredGroup] ? ` ${ROLE_TAG[p.preferredGroup]}` : '';
-                  return `<span class="bg-slate-900 text-slate-200 border border-slate-700 px-2 py-0.5 rounded-full text-[11px] font-medium">${name}${role}</span>`;
+                  const role =
+                    p.preferredGroup && ROLE_TAG[p.preferredGroup]
+                      ? ` <span class="role-pill px-1 rounded text-[9px]" data-role="${p.preferredGroup}">${ROLE_TAG[p.preferredGroup]}</span>`
+                      : '';
+                  return `<span class="bg-slate-900 text-slate-200 border border-slate-700 px-2 py-0.5 rounded-full text-[11px] font-medium inline-flex items-center gap-1">${name}${role}</span>`;
                 })
                 .join('')
             : `<span class="text-[11px] text-slate-500 italic">Tap players below or click Auto-Split</span>`;
@@ -342,7 +345,7 @@ export function renderSquadSplitter() {
         const isOff = currentAssign === 'OFF';
         const roleBadge =
           p.preferredGroup && ROLE_TAG[p.preferredGroup]
-            ? `<span class="text-[9px] bg-slate-800 text-emerald-300 px-1 py-0.5 rounded border border-slate-700">${ROLE_TAG[p.preferredGroup]}</span>`
+            ? `<span class="role-pill text-[9px] bg-slate-800 text-emerald-300 px-1 py-0.5 rounded border border-slate-700" data-role="${p.preferredGroup}">${ROLE_TAG[p.preferredGroup]}</span>`
             : '';
 
         const teamBtns = teams

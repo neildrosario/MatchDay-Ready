@@ -1,4 +1,11 @@
 import './style.css';
+import './theme-glass-turf.css';
+import {
+  initUiTheme,
+  setUiTheme,
+  toggleUiTheme,
+  dismissGlassPreviewBanner
+} from './theme.js';
 import { appState, subscribeAppState } from './db.js';
 import {
   initAuth,
@@ -228,10 +235,14 @@ Object.assign(window, {
   openClubLogoUpload,
   setAdminSubTab,
   setAdminMemberRoleFilter,
-  setAdminMemberSearch
+  setAdminMemberSearch,
+  setUiTheme,
+  toggleUiTheme,
+  dismissGlassPreviewBanner
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  initUiTheme();
   subscribeAppState(() => {
     renderAuthStatusBanner();
     renderAccessGate();

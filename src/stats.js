@@ -134,10 +134,10 @@ export function renderStats() {
               }
             </td>
             <td class="p-2 text-center font-bold text-emerald-400">${s.TOTAL}m</td>
-            <td class="p-2 text-center text-slate-300">${s.GK}m</td>
-            <td class="p-2 text-center text-slate-300">${s.DEF}m</td>
-            <td class="p-2 text-center text-slate-300">${s.MID}m</td>
-            <td class="p-2 text-center text-slate-300">${s.ATT}m</td>
+            <td data-role="GK" data-nonzero="${s.GK > 0 ? 'true' : 'false'}" class="p-2 text-center text-slate-300">${s.GK}m</td>
+            <td data-role="DEF" data-nonzero="${s.DEF > 0 ? 'true' : 'false'}" class="p-2 text-center text-slate-300">${s.DEF}m</td>
+            <td data-role="MID" data-nonzero="${s.MID > 0 ? 'true' : 'false'}" class="p-2 text-center text-slate-300">${s.MID}m</td>
+            <td data-role="ATT" data-nonzero="${s.ATT > 0 ? 'true' : 'false'}" class="p-2 text-center text-slate-300">${s.ATT}m</td>
             <td class="p-2 text-right">
               ${
                 allowDelete

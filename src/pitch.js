@@ -136,7 +136,9 @@ export function renderHeaderAndMatchBar() {
         const btnClass = isCurrent
           ? 'q-btn py-1.5 px-1 rounded font-bold bg-emerald-600 text-white text-xs shadow flex flex-col items-center leading-tight'
           : 'q-btn py-1.5 px-1 rounded font-bold bg-slate-800 text-slate-300 text-xs flex flex-col items-center leading-tight';
-        return `<button onclick="setQuarter(${pNum})" id="qbtn-${pNum}" class="${btnClass}">
+        return `<button onclick="setQuarter(${pNum})" id="qbtn-${pNum}" data-active="${
+          isCurrent ? 'true' : 'false'
+        }" class="${btnClass}">
           <span>${label}</span>
           <span class="text-[9px] font-normal ${
             isCurrent ? 'text-emerald-100' : 'text-slate-400'
@@ -421,8 +423,8 @@ export function renderPitch() {
 
         const editable = canEditCurrentTeam();
         html += `
-          <div class="flex-1 min-w-0 text-center">
-            <span class="text-[9px] font-bold px-1 py-0.5 rounded-t ${pos.color} text-white block truncate">${pos.label}</span>
+          <div class="pitch-node flex-1 min-w-0 text-center" data-role="${pos.group}">
+            <span class="pitch-node-badge text-[9px] font-bold px-1 py-0.5 rounded-t ${pos.color} text-white block truncate" data-role="${pos.group}">${pos.label}</span>
             <select data-pos-id="${pos.id}" ${editable ? '' : 'disabled'}
               class="pitch-slot-select w-full bg-slate-900/95 text-white font-semibold ${
                 isDenseRow ? 'text-[10px] py-1' : 'text-xs py-1.5'
@@ -456,7 +458,7 @@ export function renderPitch() {
             const pref = preferredMap[s];
             const roleTag =
               pref && ROLE_BADGE_TEXT[pref]
-                ? `<span class="text-[9px] bg-slate-900/80 text-emerald-300 px-1 rounded">${ROLE_BADGE_TEXT[pref]}</span>`
+                ? `<span class="role-pill text-[9px] bg-slate-900/80 text-emerald-300 px-1 rounded" data-role="${pref}">${ROLE_BADGE_TEXT[pref]}</span>`
                 : '';
             return `<span class="bg-slate-700 text-slate-200 px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1">${s}${roleTag}${
               isShared ? '<span class="text-[10px] text-sky-300" title="Shared Age-Group Player">🔗</span>' : ''

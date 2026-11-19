@@ -10,6 +10,18 @@
   <link rel="icon" type="image/jpeg" href="/matchdayready-logo.jpeg">
   <link rel="apple-touch-icon" href="/matchdayready-logo.jpeg">
   <title>MatchDay Ready — Club Football Manager</title>
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var raw = (params.get('ui') || localStorage.getItem('mdr_ui_theme') || 'classic').trim().toLowerCase();
+        var isGlass = raw === 'glass' || raw === 'glass-turf' || raw === 'new' || raw === 'v2' || raw === 'turf' || raw === 'preview';
+        document.documentElement.dataset.ui = isGlass ? 'glass-turf' : 'classic';
+      } catch (e) {
+        document.documentElement.dataset.ui = 'classic';
+      }
+    })();
+  </script>
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-24 font-sans">
 
@@ -61,9 +73,14 @@
           <option value="11v11">11 v 11</option>
         </select>
       </div>
-      <button onclick="showAuthModal()" id="coachProfileBadge" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold truncate max-w-[160px]">
-        👤 Neil D'Rosario
-      </button>
+      <div class="flex items-center gap-1.5 ml-auto">
+        <button id="uiThemeToggleBtn" type="button" onclick="toggleUiTheme()" aria-pressed="false" title="Try the new Matchday Glass & Turf UI preview" class="text-[10px] bg-slate-700/90 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded border border-emerald-500/40 font-bold flex items-center gap-1 whitespace-nowrap transition">
+          <span>✨</span><span>Glass UI</span>
+        </button>
+        <button onclick="showAuthModal()" id="coachProfileBadge" class="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold truncate max-w-[130px]">
+          👤 Neil D'Rosario
+        </button>
+      </div>
     </div>
 
     <!-- Row 3: Club Team Selector -->
@@ -78,6 +95,18 @@
 
   <!-- Main Content Container -->
   <main class="max-w-md mx-auto p-3">
+
+    <!-- GLASS & TURF UI PREVIEW NOTICE (Hidden in Classic Mode) -->
+    <div id="glassPreviewBanner" class="hidden mb-3 px-2.5 py-1.5 text-[11px] text-emerald-100 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span>✨</span>
+        <span class="truncate"><strong>Glass &amp; Turf Preview</strong> — same live data</span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" onclick="setUiTheme('classic')" class="text-emerald-300 hover:text-white underline font-bold">Classic</button>
+        <button type="button" onclick="dismissGlassPreviewBanner()" aria-label="Dismiss preview notice" class="text-slate-300 hover:text-white font-bold px-0.5">✕</button>
+      </div>
+    </div>
 
     <!-- MILESTONE 13 & 15: ACCESS / ROLE / MULTI-CLUB STATUS BANNERS -->
     <div id="additionalInviteBanner" class="hidden bg-emerald-950/70 border border-emerald-500/50 rounded-lg p-2.5 mb-3 text-xs text-emerald-200">
@@ -185,7 +214,7 @@
     <!-- VIEW 1: MATCH PITCH -->
     <div id="view-pitch">
       <!-- Live Sideline Match Timer & 50% Sub Alert Bar (Milestone 9) -->
-      <div class="bg-slate-800/95 border border-slate-700 rounded-lg p-2.5 mb-2.5 shadow">
+      <div id="timerCard" class="bg-slate-800/95 border border-slate-700 rounded-lg p-2.5 mb-2.5 shadow">
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span id="timerPeriodBadge" class="text-xs font-bold bg-slate-900 text-emerald-400 px-2 py-0.5 rounded border border-slate-700">⏱️ Q1</span>
@@ -209,7 +238,7 @@
         </div>
 
         <!-- Progress Bar with 50% Sub Midpoint Tick -->
-        <div class="relative w-full h-2 bg-slate-900 rounded-full overflow-hidden mt-2 border border-slate-700/80">
+        <div id="timerProgressTrack" class="relative w-full h-2 bg-slate-900 rounded-full overflow-hidden mt-2 border border-slate-700/80">
           <div id="timerProgressBar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%"></div>
           <div class="absolute left-1/2 top-0 bottom-0 w-0.5 bg-amber-400/80" title="50% Mid-Period Sub Mark"></div>
         </div>
@@ -261,6 +290,11 @@
         <!-- Pitch Markings -->
         <div class="absolute inset-x-0 top-1/2 border-t-2 border-white/40 pointer-events-none"></div>
         <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/40 pointer-events-none"></div>
+        <div class="glass-pitch-marking absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white/60 pointer-events-none"></div>
+        <div class="glass-pitch-marking absolute top-0 left-1/2 -translate-x-1/2 w-44 h-16 border-2 border-t-0 border-white/35 rounded-b-sm pointer-events-none"></div>
+        <div class="glass-pitch-marking absolute top-0 left-1/2 -translate-x-1/2 w-24 h-7 border-2 border-t-0 border-white/30 pointer-events-none"></div>
+        <div class="glass-pitch-marking absolute bottom-0 left-1/2 -translate-x-1/2 w-44 h-16 border-2 border-b-0 border-white/35 rounded-t-sm pointer-events-none"></div>
+        <div class="glass-pitch-marking absolute bottom-0 left-1/2 -translate-x-1/2 w-24 h-7 border-2 border-b-0 border-white/30 pointer-events-none"></div>
         
         <!-- Pitch Slot Rows -->
         <div id="pitchSlots" class="relative z-10 flex flex-col justify-between h-full py-1"></div>
@@ -434,10 +468,10 @@
             <tr>
               <th class="p-2.5">Player</th>
               <th class="p-2 text-center">Total</th>
-              <th class="p-2 text-center">GK</th>
-              <th class="p-2 text-center">DEF</th>
-              <th class="p-2 text-center">MID</th>
-              <th class="p-2 text-center">ATT</th>
+              <th data-role="GK" class="p-2 text-center">GK</th>
+              <th data-role="DEF" class="p-2 text-center">DEF</th>
+              <th data-role="MID" class="p-2 text-center">MID</th>
+              <th data-role="ATT" class="p-2 text-center">ATT</th>
               <th class="p-2"></th>
             </tr>
           </thead>
@@ -448,7 +482,7 @@
 
     <!-- VIEW 4: DEDICATED CLUB ADMIN DASHBOARD (Milestone 14) -->
     <div id="view-admin" class="hidden pb-12 space-y-3">
-      <div class="bg-slate-800 p-1 rounded-lg border border-purple-500/40 flex gap-1">
+      <div id="adminSubtabBar" class="bg-slate-800 p-1 rounded-lg border border-purple-500/40 flex gap-1">
         <button id="admin-subtab-people" onclick="setAdminSubTab('people')" class="flex-1 py-1.5 px-2 text-center font-bold text-[11px] rounded bg-purple-600 text-white shadow">👥 Staff</button>
         <button id="admin-subtab-teams" onclick="setAdminSubTab('teams')" class="flex-1 py-1.5 px-2 text-center font-semibold text-[11px] rounded bg-slate-900 text-slate-400">🛡️ Teams</button>
         <button id="admin-subtab-overview" onclick="setAdminSubTab('overview')" class="flex-1 py-1.5 px-2 text-center font-semibold text-[11px] rounded bg-slate-900 text-slate-400">🏟️ Club</button>
