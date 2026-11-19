@@ -104,8 +104,17 @@ import {
   canViewSplitterTab,
   canViewStatsTab
 } from './permissions.js';
+import { initSwipeNavigation } from './swipe.js';
 
 let currentView = 'pitch';
+
+function getVisibleViews() {
+  const views = ['pitch'];
+  if (canViewSplitterTab(appState.userProfile)) views.push('splitter');
+  if (canViewStatsTab(appState.userProfile)) views.push('stats');
+  if (isClubAdmin(appState.userProfile)) views.push('admin');
+  return views;
+}
 
 export function switchView(view) {
   if (view === 'admin' && !isClubAdmin(appState.userProfile)) {
@@ -284,6 +293,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initAuth();
   initMatchTimer();
+  initSwipeNavigation({
+    getCurrentView: () => currentView,
+    getVisibleViews,
+    onSwitchView: switchView
+  });
   renderPitch();
 
   // Register PWA Service Worker (Milestone 10)

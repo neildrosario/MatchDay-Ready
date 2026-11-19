@@ -139,15 +139,15 @@
     <!-- VIEW 1: MATCH PITCH -->
     <div id="view-pitch">
       <!-- Period Selector (4 Quarters / 3 Thirds / 2 Halves) -->
-      <div id="periodTabsGrid" class="grid grid-cols-4 gap-2 mb-2.5">
-        <button onclick="setQuarter(1)" id="qbtn-1" class="q-btn py-2 rounded font-bold bg-emerald-600 text-white text-sm shadow">Q1</button>
-        <button onclick="setQuarter(2)" id="qbtn-2" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q2</button>
-        <button onclick="setQuarter(3)" id="qbtn-3" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q3</button>
-        <button onclick="setQuarter(4)" id="qbtn-4" class="q-btn py-2 rounded font-bold bg-slate-800 text-slate-300 text-sm">Q4</button>
+      <div id="periodTabsGrid" class="grid grid-cols-4 gap-1.5 mb-1.5">
+        <button onclick="setQuarter(1)" id="qbtn-1" class="q-btn py-1 px-1 rounded font-bold bg-emerald-600 text-white text-[11px] shadow">Q1</button>
+        <button onclick="setQuarter(2)" id="qbtn-2" class="q-btn py-1 px-1 rounded font-bold bg-slate-800 text-slate-300 text-[11px]">Q2</button>
+        <button onclick="setQuarter(3)" id="qbtn-3" class="q-btn py-1 px-1 rounded font-bold bg-slate-800 text-slate-300 text-[11px]">Q3</button>
+        <button onclick="setQuarter(4)" id="qbtn-4" class="q-btn py-1 px-1 rounded font-bold bg-slate-800 text-slate-300 text-[11px]">Q4</button>
       </div>
 
       <!-- Per-Period Tactical Shape Bar (Milestone 6 & 7) -->
-      <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-1.5 mb-2 flex items-center justify-between gap-2 text-xs">
+      <div class="bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-1.5 mb-1.5 flex items-center justify-between gap-2 text-xs">
         <span id="tacticalShapeQuarterLabel" class="font-bold text-slate-300">Q1 Formation:</span>
         <select id="tacticalShapeSelect" onchange="onTacticalShapeChange(this.value)" class="bg-slate-900 text-emerald-300 font-bold px-2.5 py-1 rounded border border-emerald-500/40 text-xs flex-1">
           <option value="GK-2-3-1">📐 GK-2-3-1</option>
@@ -158,19 +158,19 @@
       </div>
 
       <!-- Action Toolbar (Auto-Fill, Swaps & Match Events — Milestones 11 & 12) -->
-      <div id="pitchActionToolbar" class="space-y-1 mb-2">
+      <div id="pitchActionToolbar" class="space-y-1 mb-1.5">
         <div class="grid grid-cols-3 gap-1.5">
-          <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+          <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             🪄 Auto-Fair
           </button>
-          <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+          <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             🔄 Mid-Sub
           </button>
-          <button onclick="openEventModal()" class="bg-emerald-600 hover:bg-emerald-500 py-2 px-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1 shadow">
+          <button onclick="openEventModal()" class="bg-emerald-600 hover:bg-emerald-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             ⚽ + Event
           </button>
         </div>
-        <label class="flex items-center justify-end gap-1.5 text-[11px] text-slate-300 cursor-pointer px-1">
+        <label class="flex items-center justify-end gap-1.5 text-[10px] text-slate-300 cursor-pointer px-1">
           <input type="checkbox" id="seasonFairnessCheckbox" checked class="rounded bg-slate-800 border-slate-600 text-indigo-500 focus:ring-0">
           <span>⚖️ Balance Auto-Fair rotation with Season-to-Date minutes</span>
         </label>

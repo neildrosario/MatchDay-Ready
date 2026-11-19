@@ -127,20 +127,20 @@ export function renderHeaderAndMatchBar() {
   if (tabsGrid) {
     const colsClass =
       periodCount === 2 ? 'grid-cols-2' : periodCount === 3 ? 'grid-cols-3' : 'grid-cols-4';
-    tabsGrid.className = `grid ${colsClass} gap-1.5 mb-2`;
+    tabsGrid.className = `grid ${colsClass} gap-1.5 mb-1.5`;
     tabsGrid.innerHTML = periods
       .map(pNum => {
         const pLineup = getQuarterLineupDoc(pNum);
         const isCurrent = pNum === appState.currentQuarter;
         const label = getPeriodShortLabel(pNum, periodCount);
         const btnClass = isCurrent
-          ? 'q-btn py-1.5 px-1 rounded font-bold bg-emerald-600 text-white text-xs shadow flex flex-col items-center leading-tight'
-          : 'q-btn py-1.5 px-1 rounded font-bold bg-slate-800 text-slate-300 text-xs flex flex-col items-center leading-tight';
+          ? 'q-btn py-1 px-1 rounded font-bold bg-emerald-600 text-white text-[11px] shadow flex flex-col items-center leading-tight'
+          : 'q-btn py-1 px-1 rounded font-bold bg-slate-800 text-slate-300 text-[11px] flex flex-col items-center leading-tight';
         return `<button onclick="setQuarter(${pNum})" id="qbtn-${pNum}" data-active="${
           isCurrent ? 'true' : 'false'
         }" class="${btnClass}">
           <span>${label}</span>
-          <span class="text-[9px] font-normal ${
+          <span class="text-[8.5px] font-normal leading-tight ${
             isCurrent ? 'text-emerald-100' : 'text-slate-400'
           }">${pLineup.tacticalShape}</span>
         </button>`;

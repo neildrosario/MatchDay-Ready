@@ -265,10 +265,11 @@ html[data-ui="glass-turf"] #timerToggleBtn {
   border-radius: 9999px;
 }
 
-/* Period Tabs (Q1–Q4 / T1–T3 / H1–H2) */
+/* Period Tabs (Q1–Q4 / T1–T3 / H1–H2) — compact ~15% tighter height */
 html[data-ui="glass-turf"] #periodTabsGrid .q-btn {
-  min-height: 44px;
-  border-radius: 0.75rem;
+  min-height: 36px;
+  padding: 0.25rem 0.35rem;
+  border-radius: 0.65rem;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: #cbd5e1;
@@ -282,10 +283,11 @@ html[data-ui="glass-turf"] #periodTabsGrid .q-btn[data-active="true"] {
   box-shadow: 0 8px 20px -6px rgba(16, 185, 129, 0.75), var(--glass-highlight);
 }
 
-/* Sideline Action Toolbar touch targets */
+/* Sideline Action Toolbar — compact ~15% tighter height */
 html[data-ui="glass-turf"] #pitchActionToolbar button {
-  min-height: 42px;
-  border-radius: 0.75rem;
+  min-height: 35px;
+  padding-block: 0.35rem;
+  border-radius: 0.65rem;
 }
 
 /* --------------------------------------------------------------------------
