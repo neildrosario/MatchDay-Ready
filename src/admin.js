@@ -1,6 +1,7 @@
 import {
   appState,
   getActiveUserProfile,
+  getUserClubMemberships,
   getSelectedTeam,
   getPlayerDisplayName,
   updateClubSettings,
@@ -26,6 +27,7 @@ import {
 } from './db.js';
 import {
   isClubAdmin,
+  isPlatformOwnerAdmin,
   canViewSplitterTab,
   canViewStatsTab,
   getClubAgeGroups,
@@ -258,8 +260,41 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
   const totalMatches = Object.keys(appState.allMatches || {}).length;
   const joinCode = club.joinCode || 'Not Set';
   const joinEnabled = club.joinCodeEnabled !== false;
+  const isOwner = isPlatformOwnerAdmin(appState.userProfile);
+  const allClubsList = isOwner ? getUserClubMemberships(appState.userProfile) : [];
+
+  const ownerClubsCard = isOwner
+    ? `<div class="bg-slate-800 border border-indigo-500/40 rounded-lg p-3 space-y-2 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h4 class="font-bold text-indigo-300">🌐 All Platform Clubs (${allClubsList.length})</h4>
+            <p class="text-[10px] text-slate-400">Overall Admin view — switch into any club workspace or register a new club.</p>
+          </div>
+          <button type="button" onclick="openClubHubModal('create')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">+ New Club</button>
+        </div>
+        <div class="space-y-1.5">
+          ${allClubsList
+            .map(c => {
+              const isCurrent = c.clubId === appState.userProfile?.clubId;
+              return `
+                <div class="flex items-center justify-between gap-2 bg-slate-900/80 px-2.5 py-1.5 rounded border ${
+                  isCurrent ? 'border-emerald-500/60' : 'border-slate-700'
+                }">
+                  <span class="font-bold text-white truncate">🏟️ ${escapeHtml(c.clubName || c.clubId)}</span>
+                  ${
+                    isCurrent
+                      ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold shrink-0">Active</span>`
+                      : `<button type="button" onclick="handleSwitchClubUI('${escapeHtml(c.clubId)}')" class="bg-sky-600 hover:bg-sky-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Switch</button>`
+                  }
+                </div>`;
+            })
+            .join('')}
+        </div>
+      </div>`
+    : '';
 
   container.innerHTML = `
+    ${ownerClubsCard}
     <!-- KPI Grid -->
     <div class="grid grid-cols-4 gap-2">
       <div class="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-center">

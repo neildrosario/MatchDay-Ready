@@ -14,6 +14,10 @@ export function isPrimaryAdminEmail(email) {
   return typeof email === 'string' && email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
 }
 
+export function isPlatformOwnerAdmin(profile) {
+  return isProfileActive(profile) && isPrimaryAdminEmail(profile.email);
+}
+
 export const ROLE_META = {
   admin: {
     key: 'admin',

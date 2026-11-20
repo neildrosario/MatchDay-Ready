@@ -599,6 +599,7 @@ export function renderClubSwitcher() {
     ? `MatchDay Ready — ${appState.club.shortName}`
     : 'MatchDay Ready — Club Football Manager';
 
+  // Also hydrate local store clubs for platform owner in local mode
   if (memberships.length > 1 && switcherSel && badgeBtn) {
     badgeBtn.classList.add('hidden');
     switcherSel.classList.remove('hidden');
@@ -606,7 +607,7 @@ export function renderClubSwitcher() {
       .map(m => {
         const selected = m.clubId === appState.userProfile?.clubId ? 'selected' : '';
         const meta = getRoleMeta(m.role);
-        return `<option value="${m.clubId}" ${selected}>🏟️ ${escapeHtml(m.clubName || m.clubId)} (${meta.short})</option>`;
+        return `<option value="${escapeHtml(m.clubId)}" ${selected}>🏟️ ${escapeHtml(m.clubName || m.clubId)} (${meta.short})</option>`;
       })
       .join('');
   } else if (badgeBtn && switcherSel) {

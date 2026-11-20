@@ -528,12 +528,16 @@ service cloud.firestore {
     // --- CLUBS ---
     match /clubs/{clubId} {
       allow get: if isSignedIn() && (
+        isPrimaryOwnerAdmin() ||
         isClubMember(clubId) ||
         !exists(/databases/$(database)/documents/clubs/$(clubId))
       );
-      allow list: if isClubMember(clubId);
+      allow list: if isSignedIn() && (
+        isPrimaryOwnerAdmin() ||
+        isClubMember(clubId)
+      );
       allow create: if isSignedIn() && !exists(/databases/$(database)/documents/clubs/$(clubId));
-      allow update: if isClubAdmin(clubId);
+      allow update: if isPrimaryOwnerAdmin() || isClubAdmin(clubId);
       allow delete: if false;
     }
 

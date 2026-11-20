@@ -4,6 +4,7 @@ import {
   ROLES,
   PRIMARY_ADMIN_EMAIL,
   isPrimaryAdminEmail,
+  isPlatformOwnerAdmin,
   normalizeRole,
   getRoleMeta,
   isProfileActive,
@@ -326,5 +327,10 @@ describe('4-Role RBAC & Access Control (src/permissions.js)', () => {
     assert.equal(isPrimaryAdminEmail('  NeilDRosario@Gmail.com  '), true);
     assert.equal(isPrimaryAdminEmail('othercoach@gmail.com'), false);
     assert.equal(isPrimaryAdminEmail(null), false);
+
+    // Overall Platform Owner Admin check (can switch across all clubs)
+    assert.equal(isPlatformOwnerAdmin({ ...ADMIN, email: 'neildrosario@gmail.com' }), true);
+    assert.equal(isPlatformOwnerAdmin({ ...ADMIN, email: 'otheradmin@club.ie' }), false);
+    assert.equal(isPlatformOwnerAdmin({ ...SUSPENDED_COACH, email: 'neildrosario@gmail.com' }), false);
   });
 });

@@ -22,6 +22,7 @@ import {
   getEffectiveUserProfile,
   isClubAdmin,
   isPrimaryAdminEmail,
+  isPlatformOwnerAdmin,
   isProfileActive,
   canModifyUserRole,
   canRemoveUser,
@@ -195,6 +196,7 @@ export const appState = {
   adminViewAsRole: 'admin', // 'admin' | 'lead' — lets Club Admin switch to Age-Group Lead view for their own teams
   adminLeadAgeGroup: localStorage.getItem('matchday_admin_lead_ag_v1') || '', // Optional selected age group for Admin Lead View (e.g. 'U8')
   club: null,
+  allPlatformClubs: [], // Populated for Overall Platform Admin (neildrosario@gmail.com) to switch across ALL clubs
   teams: [], // Teams accessible to this user
   allClubTeams: [], // All teams in club (for shared player badges & admin)
   allClubUsers: [], // All coaches/leads/viewers/admins in club
@@ -280,6 +282,23 @@ export function getUserClubMemberships(profile = appState.userProfile) {
       ...map[appState.club.clubId],
       clubName: appState.club.shortName || appState.club.name || map[appState.club.clubId].clubName
     };
+  }
+
+  // Overall Platform Admin (neildrosario@gmail.com) can switch to EVERY club registered on the platform
+  if (isPlatformOwnerAdmin(profile) && Array.isArray(appState.allPlatformClubs)) {
+    appState.allPlatformClubs.forEach(c => {
+      if (!c || !c.clubId) return;
+      const existing = map[c.clubId];
+      map[c.clubId] = {
+        clubId: c.clubId,
+        clubName: c.shortName || c.name || existing?.clubName || c.clubId,
+        role: 'admin',
+        status: 'active',
+        assignedTeamIds: existing?.assignedTeamIds || [],
+        assignedAgeGroups: existing?.assignedAgeGroups || [],
+        isPlatformClub: true
+      };
+    });
   }
 
   return Object.values(map).sort((a, b) =>
@@ -1126,6 +1145,24 @@ export function startFirestoreSubscriptions(firebaseUser) {
       }
     })
   );
+
+  // 1B. Overall Platform Admin (neildrosario@gmail.com): watch ALL clubs on the platform for 1-tap switching
+  if (isPrimaryAdminEmail(firebaseUser.email || appState.userProfile?.email)) {
+    activeUnsubscribes.push(
+      onSnapshot(
+        collection(db, 'clubs'),
+        snap => {
+          appState.allPlatformClubs = snap.docs
+            .map(d => ({ clubId: d.id, ...d.data() }))
+            .sort((a, b) => (a.shortName || a.name || a.clubId).localeCompare(b.shortName || b.name || b.clubId));
+          notifyAppState();
+        },
+        err => console.warn('Platform clubs list listener note:', err)
+      )
+    );
+  } else {
+    appState.allPlatformClubs = [];
+  }
 
   // 2. Subscribe to own User profile (handles live role/team changes & suspension)
   let adminSubsActive = isClubAdmin(appState.userProfile);
@@ -2673,14 +2710,33 @@ export async function registerNewClub({
 }
 
 /**
- * Switches an authenticated multi-club user's active club cleanly.
+ * Switches an authenticated multi-club user (or Overall Platform Admin) to another club cleanly.
  */
 export async function switchActiveClub(targetClubId) {
   if (!targetClubId || !appState.userProfile) return;
   if (appState.userProfile.clubId === targetClubId) return;
 
+  const isOwner = isPlatformOwnerAdmin(appState.userProfile);
   const memberships = appState.userProfile.clubMemberships || {};
-  const target = memberships[targetClubId];
+  let target = memberships[targetClubId];
+
+  if (!target && isOwner) {
+    const platformClub = (appState.allPlatformClubs || []).find(c => c.clubId === targetClubId);
+    if (!platformClub) {
+      throw new Error('Target club was not found on the platform.');
+    }
+    target = {
+      clubId: targetClubId,
+      clubName: platformClub.shortName || platformClub.name || targetClubId,
+      role: 'admin',
+      status: 'active',
+      assignedTeamIds: [],
+      assignedAgeGroups: targetClubId === DEFAULT_CLUB_ID ? ['U10'] : [],
+      canViewSplitter: true,
+      canViewStats: true
+    };
+  }
+
   if (!target) {
     throw new Error('You do not have an active membership for that club.');
   }
@@ -2690,7 +2746,7 @@ export async function switchActiveClub(targetClubId) {
 
   const switchPatch = {
     clubId: targetClubId,
-    role: normalizeRole(target.role || 'viewer'),
+    role: isOwner ? 'admin' : normalizeRole(target.role || 'viewer'),
     status: target.status || 'active',
     assignedTeamIds: Array.isArray(target.assignedTeamIds) ? [...target.assignedTeamIds] : [],
     assignedAgeGroups: Array.isArray(target.assignedAgeGroups) ? [...target.assignedAgeGroups] : [],
@@ -2703,10 +2759,13 @@ export async function switchActiveClub(targetClubId) {
     const { db } = getFirebaseServices();
     await updateDoc(doc(db, 'users', appState.userProfile.uid), switchPatch);
     appState.userProfile = { ...appState.userProfile, ...switchPatch };
+    appState.adminViewAsRole = 'admin';
     resetClubRuntimeData();
     if (switchPatch.assignedTeamIds.length > 0) {
       appState.selectedTeamId = switchPatch.assignedTeamIds[0];
       localStorage.setItem('matchday_selected_team_v3', appState.selectedTeamId);
+    } else {
+      appState.selectedTeamId = '';
     }
     startFirestoreSubscriptions(appState.currentUser);
   } else {
