@@ -21,6 +21,7 @@ import {
   getAccessibleTeamsForProfile,
   getEffectiveUserProfile,
   isClubAdmin,
+  isPrimaryAdminEmail,
   isProfileActive,
   canModifyUserRole,
   canRemoveUser,
@@ -694,7 +695,69 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
   // 1. Check existing user profile first
   const userSnap = await getDoc(userRef);
   if (userSnap.exists()) {
-    const profile = userSnap.data();
+    let profile = userSnap.data();
+
+    // Ensure verified primary owner (neildrosario@gmail.com) ALWAYS defaults to active Club Admin
+    if (isPrimaryAdminEmail(cleanEmail)) {
+      const activeClub = profile.clubId || DEFAULT_CLUB_ID;
+      const existingMemberships = buildSeededMembershipsForUser(profile);
+      const currentClubEntry = existingMemberships[activeClub] || {
+        clubId: activeClub,
+        clubName: activeClub === DEFAULT_CLUB_ID ? DEFAULT_CLUB_NAME : activeClub,
+        role: 'admin',
+        status: 'active',
+        assignedTeamIds: Array.isArray(profile.assignedTeamIds) ? [...profile.assignedTeamIds] : [],
+        assignedAgeGroups:
+          Array.isArray(profile.assignedAgeGroups) && profile.assignedAgeGroups.length > 0
+            ? [...profile.assignedAgeGroups]
+            : ['U10'],
+        canViewSplitter: true,
+        canViewStats: true
+      };
+      const leadAgeGroups =
+        Array.isArray(profile.assignedAgeGroups) && profile.assignedAgeGroups.length > 0
+          ? [...profile.assignedAgeGroups]
+          : ['U10'];
+      const needsAdminUpgrade =
+        profile.role !== 'admin' ||
+        profile.status !== 'active' ||
+        currentClubEntry.role !== 'admin' ||
+        !Array.isArray(profile.assignedAgeGroups) ||
+        profile.assignedAgeGroups.length === 0;
+
+      if (needsAdminUpgrade) {
+        const now = new Date().toISOString();
+        const upgradedMemberships = {
+          ...existingMemberships,
+          [activeClub]: {
+            ...currentClubEntry,
+            role: 'admin',
+            status: 'active',
+            assignedAgeGroups: leadAgeGroups,
+            canViewSplitter: true,
+            canViewStats: true
+          }
+        };
+        const upgradePatch = {
+          role: 'admin',
+          status: 'active',
+          assignedAgeGroups: leadAgeGroups,
+          canViewSplitter: true,
+          canViewStats: true,
+          clubMemberships: upgradedMemberships,
+          memberClubIds: Array.from(new Set([...(profile.memberClubIds || []), activeClub])),
+          updatedAt: now
+        };
+        try {
+          await setDoc(userRef, upgradePatch, { merge: true });
+        } catch (upgradeErr) {
+          console.warn('Primary admin profile sync note:', upgradeErr);
+        }
+        profile = { ...profile, ...upgradePatch };
+      }
+      appState.adminViewAsRole = 'admin';
+    }
+
     appState.userProfile = profile;
     if (!isProfileActive(profile)) {
       resetClubRuntimeData();
@@ -731,6 +794,44 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
     appState.accessStatus = 'ready';
     notifyAppState();
     return { accessStatus: 'ready', userProfile: profile };
+  }
+
+  // 1B. Primary owner admin (neildrosario@gmail.com) with no profile doc yet -> create active Club Admin immediately
+  if (isPrimaryAdminEmail(cleanEmail)) {
+    const now = new Date().toISOString();
+    const ownerProfile = {
+      uid: firebaseUser.uid,
+      email: cleanEmail,
+      displayName: resolvedName || "Neil D'Rosario",
+      role: 'admin',
+      status: 'active',
+      clubId: DEFAULT_CLUB_ID,
+      assignedTeamIds: [],
+      assignedAgeGroups: ['U10'],
+      canViewSplitter: true,
+      canViewStats: true,
+      memberClubIds: [DEFAULT_CLUB_ID],
+      clubMemberships: {
+        [DEFAULT_CLUB_ID]: {
+          clubId: DEFAULT_CLUB_ID,
+          clubName: DEFAULT_CLUB_NAME,
+          role: 'admin',
+          status: 'active',
+          assignedTeamIds: [],
+          assignedAgeGroups: ['U10'],
+          canViewSplitter: true,
+          canViewStats: true
+        }
+      },
+      createdAt: now,
+      updatedAt: now
+    };
+    await setDoc(userRef, ownerProfile);
+    appState.userProfile = ownerProfile;
+    appState.adminViewAsRole = 'admin';
+    appState.accessStatus = 'ready';
+    notifyAppState();
+    return { accessStatus: 'ready', userProfile: ownerProfile };
   }
 
   // 2. Check pre-authorized email invite (Direct ?invite= lookup first, then email query)

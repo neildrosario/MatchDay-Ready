@@ -37,7 +37,7 @@ service cloud.firestore {
     }
 
     function isClubAdmin(clubId) {
-      return isClubMember(clubId) && userRole() == 'admin';
+      return isClubMember(clubId) && (userRole() == 'admin' || isPrimaryOwnerAdmin());
     }
 
     function isClubLeadForAgeGroup(clubId, ageGroup) {
@@ -75,6 +75,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email != null
         ? request.auth.token.email.lower()
         : '';
+    }
+
+    // Verified platform/club owner admin (strictly Google/verified email match for Neil)
+    function isPrimaryOwnerAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && authEmailLower() == 'neildrosario@gmail.com';
     }
 
     function isValidRole(role) {
@@ -376,7 +383,14 @@ service cloud.firestore {
           || (request.auth.uid == userId && isValidInviteClaim(request.resource.data))
           // 3. New coach self-registering with a valid active Club Registration Code (starts with 0 teams)
           || (request.auth.uid == userId && isValidJoinCodeRegistration(request.resource.data))
-          // 4. Founding Admin bootstrapping a brand-new club that does not exist yet
+          // 4. Verified primary owner admin (neildrosario@gmail.com) always defaults to Club Admin
+          || (
+            request.auth.uid == userId
+            && isPrimaryOwnerAdmin()
+            && request.resource.data.role == 'admin'
+            && request.resource.data.status == 'active'
+          )
+          // 5. Founding Admin bootstrapping a brand-new club that does not exist yet
           || (
             request.auth.uid == userId
             && request.resource.data.role == 'admin'
@@ -387,8 +401,15 @@ service cloud.firestore {
         );
 
       allow update: if isSignedIn() && (
-        // 1. Club Admin updating a member currently active in their club
+        // 0. Verified primary owner admin self-syncing default Admin role
         (
+          request.auth.uid == userId
+          && isPrimaryOwnerAdmin()
+          && request.resource.data.role == 'admin'
+          && request.resource.data.status == 'active'
+        )
+        // 1. Club Admin updating a member currently active in their club
+        || (
           isClubAdmin(resource.data.clubId)
           && request.resource.data.clubId == resource.data.clubId
           && isValidRole(request.resource.data.role)

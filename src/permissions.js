@@ -8,6 +8,11 @@
  */
 
 export const ROLES = ['admin', 'lead', 'coach', 'viewer'];
+export const PRIMARY_ADMIN_EMAIL = 'neildrosario@gmail.com';
+
+export function isPrimaryAdminEmail(email) {
+  return typeof email === 'string' && email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+}
 
 export const ROLE_META = {
   admin: {

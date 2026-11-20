@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ROLES,
+  PRIMARY_ADMIN_EMAIL,
+  isPrimaryAdminEmail,
   normalizeRole,
   getRoleMeta,
   isProfileActive,
@@ -317,5 +319,12 @@ describe('4-Role RBAC & Access Control (src/permissions.js)', () => {
     const coachUnchanged = getEffectiveUserProfile(COACH_WHITE, 'lead', TEAMS);
     assert.equal(coachUnchanged.role, 'coach');
     assert.deepEqual(coachUnchanged.assignedTeamIds, ['u10_white']);
+
+    // Primary owner admin email check is strict and case-insensitive
+    assert.equal(PRIMARY_ADMIN_EMAIL, 'neildrosario@gmail.com');
+    assert.equal(isPrimaryAdminEmail('neildrosario@gmail.com'), true);
+    assert.equal(isPrimaryAdminEmail('  NeilDRosario@Gmail.com  '), true);
+    assert.equal(isPrimaryAdminEmail('othercoach@gmail.com'), false);
+    assert.equal(isPrimaryAdminEmail(null), false);
   });
 });
