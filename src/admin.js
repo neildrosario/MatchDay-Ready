@@ -722,7 +722,7 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
     <div class="bg-sky-950/40 border border-sky-500/40 rounded-lg p-2.5 flex items-center justify-between gap-2 text-xs">
       <div class="min-w-0">
         <div class="font-bold text-sky-300 text-xs">📋 Coaching Your Own Age Group?</div>
-        <div class="text-[10px] text-slate-300">Switch to Lead View to see only your age-group teams (e.g. U8 Green &amp; U8 White).</div>
+        <div class="text-[10px] text-slate-300">Switch to Lead View to see only your age-group teams (e.g. U10 White &amp; U10 Green).</div>
       </div>
       <button type="button" onclick="handleSwitchAdminRoleView('lead')" class="bg-sky-600 hover:bg-sky-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded shrink-0 shadow">
         📋 Lead View

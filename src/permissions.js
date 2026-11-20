@@ -185,7 +185,7 @@ export function getApprovableTeamRequests(profile, allTeamRequests = []) {
 
 /**
  * Allows a Club Admin to optionally switch their active UI view into Age-Group Lead mode
- * (e.g. seeing only their own U8 teams: U8 Green & U8 White) without losing real Admin
+ * (e.g. seeing only their own U10 teams: U10 Green & U10 White) without losing real Admin
  * permissions in Firestore. Non-admins always receive their exact profile unchanged.
  */
 export function getEffectiveUserProfile(profile, viewAsRole = 'admin', allClubTeams = [], overrideAgeGroup = '') {
@@ -207,14 +207,14 @@ export function getEffectiveUserProfile(profile, viewAsRole = 'admin', allClubTe
       teams.length === 0 || saved.some(ag => teams.some(t => t && t.ageGroup === ag));
     if (saved.length > 0 && savedHasTeams) {
       leadAgeGroups = saved;
-    } else if (teams.some(t => t && t.ageGroup === 'U8')) {
-      leadAgeGroups = ['U8'];
+    } else if (teams.some(t => t && t.ageGroup === 'U10')) {
+      leadAgeGroups = ['U10'];
     } else if (teams.length > 0 && teams[0].ageGroup) {
       leadAgeGroups = [teams[0].ageGroup];
     } else if (saved.length > 0) {
       leadAgeGroups = saved;
     } else {
-      leadAgeGroups = ['U8'];
+      leadAgeGroups = ['U10'];
     }
   }
 

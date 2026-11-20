@@ -252,14 +252,14 @@ export function showAuthModal() {
       }
       const leadAgSel = document.getElementById('authLeadAgeGroupSelect');
       const clubAgs = getClubAgeGroups(appState.allClubTeams || []);
-      const agOptions = Array.from(new Set([...(clubAgs.length ? clubAgs : ['U8']), appState.adminLeadAgeGroup].filter(Boolean)));
+      const agOptions = Array.from(new Set([...(clubAgs.length ? clubAgs : ['U10']), appState.adminLeadAgeGroup].filter(Boolean)));
       const effectiveLead = getActiveUserProfile()?.isRolePreview
         ? getActiveUserProfile()
         : null;
       const selectedLeadAg =
         appState.adminLeadAgeGroup ||
         effectiveLead?.assignedAgeGroups?.[0] ||
-        (clubAgs.includes('U8') ? 'U8' : clubAgs[0] || 'U8');
+        (clubAgs.includes('U10') ? 'U10' : clubAgs[0] || 'U10');
 
       if (leadAgSel) {
         leadAgSel.innerHTML = agOptions

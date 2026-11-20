@@ -725,7 +725,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
       const leadAgeGroups =
         Array.isArray(profile.assignedAgeGroups) && profile.assignedAgeGroups.length > 0
           ? [...profile.assignedAgeGroups]
-          : ['U8'];
+          : ['U10'];
       const needsAdminUpgrade =
         profile.role !== 'admin' ||
         profile.status !== 'active' ||
@@ -815,7 +815,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
       status: 'active',
       clubId: DEFAULT_CLUB_ID,
       assignedTeamIds: [],
-      assignedAgeGroups: ['U8'],
+      assignedAgeGroups: ['U10'],
       canViewSplitter: true,
       canViewStats: true,
       memberClubIds: [DEFAULT_CLUB_ID],
@@ -826,7 +826,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
           role: 'admin',
           status: 'active',
           assignedTeamIds: [],
-          assignedAgeGroups: ['U8'],
+          assignedAgeGroups: ['U10'],
           canViewSplitter: true,
           canViewStats: true
         }
