@@ -12,6 +12,7 @@ import {
   canViewStatsTab,
   getClubAgeGroups,
   getAccessibleTeamsForProfile,
+  getEffectiveUserProfile,
   canEditTeam,
   canDeletePlayer,
   canCreateTeamInAgeGroup,
@@ -287,5 +288,34 @@ describe('4-Role RBAC & Access Control (src/permissions.js)', () => {
       ['straffan_afc__c1__u10_green']
     );
     assert.deepEqual(getApprovableTeamRequests(COACH_WHITE, allReqs), []);
+  });
+
+  it('lets Club Admin switch to Lead view scoped strictly to their age group teams (e.g. U10 Green & U10 White)', () => {
+    const adminWithU10 = {
+      ...ADMIN,
+      assignedAgeGroups: ['U10'],
+      // Even if assignedTeamIds previously had an unrelated team, Lead mode scopes strictly to assignedAgeGroups
+      assignedTeamIds: ['u8_white', 'u10_white', 'u10_green', 'u12_blue']
+    };
+
+    // Default admin view sees all 4 club teams
+    const asAdmin = getEffectiveUserProfile(adminWithU10, 'admin', TEAMS);
+    assert.equal(asAdmin.role, 'admin');
+    assert.equal(getAccessibleTeamsForProfile(asAdmin, TEAMS).length, 4);
+
+    // Switched to lead view -> sees ONLY U10 White and U10 Green
+    const asLead = getEffectiveUserProfile(adminWithU10, 'lead', TEAMS);
+    assert.equal(asLead.role, 'lead');
+    assert.equal(asLead.actualRole, 'admin');
+    assert.deepEqual(asLead.assignedAgeGroups, ['U10']);
+    assert.deepEqual(
+      getAccessibleTeamsForProfile(asLead, TEAMS).map(t => t.teamId),
+      ['u10_white', 'u10_green']
+    );
+
+    // Non-admin cannot use view-as switch
+    const coachUnchanged = getEffectiveUserProfile(COACH_WHITE, 'lead', TEAMS);
+    assert.equal(coachUnchanged.role, 'coach');
+    assert.deepEqual(coachUnchanged.assignedTeamIds, ['u10_white']);
   });
 });

@@ -19,6 +19,7 @@ import {
 } from './firebase.js';
 import {
   getAccessibleTeamsForProfile,
+  getEffectiveUserProfile,
   isClubAdmin,
   isProfileActive,
   canModifyUserRole,
@@ -189,7 +190,8 @@ export const appState = {
   inviteEmailMismatch: null, // { expectedEmail, signedInEmail, inviteId } when SSO account doesn't match invite link
   myPendingInvites: [], // Pending email invites addressed to the signed-in user across clubs (Milestone 15)
   currentUser: null, // Firebase auth user or local user profile
-  userProfile: null, // Document from `users` collection
+  userProfile: null, // Real document from `users` collection
+  adminViewAsRole: 'admin', // 'admin' | 'lead' — lets Club Admin switch to Age-Group Lead view for their own teams
   club: null,
   teams: [], // Teams accessible to this user
   allClubTeams: [], // All teams in club (for shared player badges & admin)
@@ -215,6 +217,29 @@ const backfilledClubIds = new Set();
 
 export function getActiveClubId() {
   return appState.userProfile?.clubId || appState.club?.clubId || DEFAULT_CLUB_ID;
+}
+
+/**
+ * Returns the effective user profile for UI filtering & permissions.
+ * Club Admins default to 'admin' on sign-in, and can toggle to 'lead' to scope
+ * their view strictly to their own age-group teams (e.g. U10 Green & U10 White).
+ */
+export function getActiveUserProfile() {
+  return getEffectiveUserProfile(
+    appState.userProfile,
+    appState.adminViewAsRole,
+    appState.allClubTeams
+  );
+}
+
+export function setAdminRoleView(mode = 'admin') {
+  if (!isClubAdmin(appState.userProfile)) {
+    appState.adminViewAsRole = 'admin';
+    return;
+  }
+  appState.adminViewAsRole = mode === 'lead' ? 'lead' : 'admin';
+  filterAccessibleTeams();
+  notifyAppState();
 }
 
 /**
@@ -1201,12 +1226,13 @@ export function startFirestoreSubscriptions(firebaseUser) {
 }
 
 function filterAccessibleTeams() {
-  if (!appState.userProfile) {
+  const activeProfile = getActiveUserProfile();
+  if (!activeProfile) {
     appState.teams = [];
     return;
   }
-  appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
-  if (appState.teams.length === 0 && !isClubAdmin(appState.userProfile)) {
+  appState.teams = getAccessibleTeamsForProfile(activeProfile, appState.allClubTeams);
+  if (appState.teams.length === 0 && !isClubAdmin(activeProfile)) {
     appState.selectedTeamId = '';
     return;
   }
@@ -1221,7 +1247,8 @@ function filterAccessibleTeams() {
 
 // --- HELPER SELECTORS ---
 export function getSelectedTeam() {
-  if (appState.userProfile && !isClubAdmin(appState.userProfile) && appState.teams.length === 0) {
+  const activeProfile = getActiveUserProfile();
+  if (activeProfile && !isClubAdmin(activeProfile) && appState.teams.length === 0) {
     return {
       teamId: '',
       clubId: getActiveClubId(),
@@ -1233,8 +1260,8 @@ export function getSelectedTeam() {
   }
   return (
     appState.teams.find(t => t.teamId === appState.selectedTeamId) ||
-    appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) ||
     appState.teams[0] ||
+    appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) ||
     appState.allClubTeams[0] || {
       teamId: appState.selectedTeamId || 'u10_white',
       clubId: getActiveClubId(),
@@ -2718,24 +2745,10 @@ export async function createClubTeam({ name, ageGroup, defaultFormation = '7v7',
   if (appState.mode === 'firebase') {
     const { db } = getFirebaseServices();
     await setDoc(doc(db, 'teams', teamId), newTeam, { merge: true });
-    // Only Club Admins update their own assignedTeamIds; Age-Group Leads get access via assignedAgeGroups
-    if (appState.userProfile && isClubAdmin(appState.userProfile)) {
-      const assigned = Array.from(new Set([...(appState.userProfile.assignedTeamIds || []), teamId]));
-      await setDoc(
-        doc(db, 'users', appState.userProfile.uid),
-        { assignedTeamIds: assigned },
-        { merge: true }
-      );
-    }
+    // Club Admins automatically have access to all club teams without adding unrelated age groups to assignedTeamIds
   } else {
     const store = loadLocalStore();
     store.teams[teamId] = newTeam;
-    const uid = appState.userProfile?.uid || 'local_coach_1';
-    if (store.users[uid] && isClubAdmin(store.users[uid])) {
-      store.users[uid].assignedTeamIds = Array.from(
-        new Set([...(store.users[uid].assignedTeamIds || []), teamId])
-      );
-    }
     saveLocalStore(store);
   }
 

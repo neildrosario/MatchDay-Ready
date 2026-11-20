@@ -93,6 +93,16 @@
       <button onclick="dismissClaimedInviteNotice()" class="text-emerald-300 hover:text-white font-bold px-1">✕</button>
     </div>
 
+    <div id="adminLeadModeBanner" class="hidden bg-sky-950/80 border border-sky-500/50 rounded-lg p-2 mb-2 text-xs text-sky-100 flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span>📋</span>
+        <span id="adminLeadModeText" class="font-semibold truncate">Lead View</span>
+      </div>
+      <button type="button" onclick="handleSwitchAdminRoleView('admin')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0 shadow">
+        🛡️ Back to Admin
+      </button>
+    </div>
+
     <div id="viewerReadOnlyBanner" class="hidden bg-slate-800 border border-slate-600 rounded-lg p-2 mb-2 text-[11px] text-slate-300 flex items-center gap-2">
       <span>👁️</span>
       <span><strong>Read-Only Viewer Mode:</strong> You can view lineups, timer, stats &amp; export Share Sheets, while editing is disabled.</span>
@@ -634,7 +644,7 @@
     </div>
   </div>
 
-  <!-- COACH AUTHENTICATION MODAL (Firebase Auth + Local Sandbox Option) -->
+  <!-- COACH AUTHENTICATION & ACCOUNT ROLE MODAL -->
   <div id="authModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-xl p-5 text-white shadow-2xl">
       <div class="flex justify-between items-center mb-3">
@@ -646,59 +656,88 @@
             <h3 id="authModalTitle" class="font-bold text-base text-white">Coach Sign In</h3>
           </div>
         </div>
-        <button onclick="hideAuthModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
+        <button id="authModalCloseBtn" type="button" onclick="hideAuthModal()" class="hidden text-slate-400 hover:text-white font-bold px-1.5 py-0.5">✕</button>
       </div>
 
-      <!-- Mode Switcher -->
-      <div class="bg-slate-900 p-1 rounded-lg flex gap-1 mb-3 border border-slate-700">
-        <button id="authTabLogin" onclick="toggleAuthMode('login')" class="flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white">Sign In</button>
-        <button id="authTabSignup" onclick="toggleAuthMode('signup')" class="flex-1 py-1.5 rounded font-bold text-xs text-slate-400">Register Coach</button>
+      <!-- SIGNED-IN ACCOUNT & ROLE SWITCHER PANEL -->
+      <div id="authAccountPanel" class="hidden space-y-3 text-xs">
+        <div class="bg-slate-900/90 border border-slate-700 rounded-lg p-3 space-y-1">
+          <div class="flex items-center justify-between gap-2">
+            <div id="authAccountName" class="font-bold text-white text-sm truncate">Coach</div>
+            <span id="authAccountRoleBadge" class="inline-block text-[10px] px-2 py-0.5 rounded border font-bold"></span>
+          </div>
+          <div id="authAccountEmail" class="text-[11px] text-slate-400 truncate"></div>
+        </div>
+
+        <!-- Club Admin -> Optional Switch to Age-Group Lead View -->
+        <div id="authAdminRoleSwitchBox" class="hidden bg-slate-900/80 border border-purple-500/40 rounded-lg p-3 space-y-2">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-purple-300">Active Role View</div>
+          <div class="flex gap-1.5">
+            <button id="authRoleSwitchAdminBtn" type="button" onclick="handleSwitchAdminRoleView('admin')" class="flex-1 py-2 px-2 rounded-lg font-bold text-xs bg-purple-600 text-white border border-purple-400 shadow">
+              🛡️ Admin View
+            </button>
+            <button id="authRoleSwitchLeadBtn" type="button" onclick="handleSwitchAdminRoleView('lead')" class="flex-1 py-2 px-2 rounded-lg font-semibold text-xs bg-slate-900 text-slate-300 border border-slate-700">
+              📋 Lead View
+            </button>
+          </div>
+          <p id="authRoleSwitchLeadDesc" class="text-[10px] text-slate-400 leading-snug"></p>
+        </div>
+
+        <button type="button" onclick="openClubHubModal('join')" class="w-full bg-slate-700 hover:bg-slate-600 text-emerald-300 py-2 rounded-lg font-bold text-xs border border-slate-600">
+          🏟️ Switch Club / Request Team / Register Club
+        </button>
+
+        <button type="button" onclick="handleLogout()" class="w-full bg-rose-600/90 hover:bg-rose-500 text-white py-2 rounded-lg font-bold text-xs shadow">
+          🚪 Sign Out
+        </button>
       </div>
 
-      <div id="authInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 text-emerald-200 text-xs p-2.5 rounded-lg mb-3">
-        <div class="font-bold text-emerald-300 mb-0.5">✉️ Pre-Authorized Coach Invite</div>
-        <div id="authInviteBannerText" class="text-[11px] leading-snug"></div>
-      </div>
+      <!-- SIGNED-OUT SIGN IN / REGISTER PANEL -->
+      <div id="authSignInPanel">
+        <!-- Mode Switcher -->
+        <div class="bg-slate-900 p-1 rounded-lg flex gap-1 mb-3 border border-slate-700">
+          <button id="authTabLogin" type="button" onclick="toggleAuthMode('login')" class="flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white">Sign In</button>
+          <button id="authTabSignup" type="button" onclick="toggleAuthMode('signup')" class="flex-1 py-1.5 rounded font-bold text-xs text-slate-400">Register Coach</button>
+        </div>
 
-      <div id="authErrorText" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded mb-3"></div>
+        <div id="authInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 text-emerald-200 text-xs p-2.5 rounded-lg mb-3">
+          <div class="font-bold text-emerald-300 mb-0.5">✉️ Pre-Authorized Coach Invite</div>
+          <div id="authInviteBannerText" class="text-[11px] leading-snug"></div>
+        </div>
 
-      <form onsubmit="handleEmailAuthSubmit(event)" class="space-y-2.5 text-xs mb-3">
-        <div id="authNameWrapper" class="hidden">
-          <label class="block text-slate-400 mb-1">Coach Name:</label>
-          <input type="text" id="authNameInput" placeholder="e.g. Alex Coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Email Address:</label>
-          <input type="email" id="authEmailInput" placeholder="coach@yourclub.ie" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-        </div>
-        <div>
-          <label class="block text-slate-400 mb-1">Password:</label>
-          <input type="password" id="authPasswordInput" placeholder="••••••••" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-        </div>
-        <div id="authJoinCodeWrapper" class="hidden">
-          <label class="block text-slate-400 mb-1">Club Registration Code <span class="text-slate-500">(skip if invited by email)</span>:</label>
-          <input type="text" id="authJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-emerald-500/40 text-emerald-200 font-mono uppercase tracking-wider font-bold">
-        </div>
-        <button type="submit" id="authSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
-          Sign In
+        <div id="authErrorText" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded mb-3"></div>
+
+        <button type="button" onclick="handleGoogleSignIn()" class="w-full bg-white text-slate-900 hover:bg-slate-100 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mb-3 shadow">
+          <span>G</span> Continue with Google
         </button>
-      </form>
 
-      <button onclick="handleGoogleSignIn()" class="w-full bg-white text-slate-900 hover:bg-slate-100 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mb-3">
-        <span>G</span> Continue with Google
-      </button>
+        <div class="flex items-center gap-2 my-2.5 text-[10px] text-slate-500 uppercase font-semibold">
+          <div class="flex-1 border-t border-slate-700"></div>
+          <span>or email &amp; password</span>
+          <div class="flex-1 border-t border-slate-700"></div>
+        </div>
 
-      <button id="authClubHubBtn" onclick="openClubHubModal('join')" class="hidden w-full bg-slate-700 hover:bg-slate-600 text-emerald-300 py-1.5 rounded-lg font-bold text-[11px] mb-3 border border-slate-600">
-        🏟️ Switch Club / Join or Register a Club
-      </button>
-
-      <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
-        <button onclick="useLocalSandboxCoach(&quot;Demo Coach&quot;)" class="text-emerald-400 underline font-semibold">
-          Continue in Local Sandbox
-        </button>
-        <button onclick="handleLogout()" class="text-rose-400 underline">
-          Sign Out
-        </button>
+        <form onsubmit="handleEmailAuthSubmit(event)" class="space-y-2.5 text-xs">
+          <div id="authNameWrapper" class="hidden">
+            <label class="block text-slate-400 mb-1">Coach Name:</label>
+            <input type="text" id="authNameInput" placeholder="e.g. Alex Coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Email Address:</label>
+            <input type="email" id="authEmailInput" placeholder="coach@yourclub.ie" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Password:</label>
+            <input type="password" id="authPasswordInput" placeholder="••••••••" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
+          </div>
+          <div id="authJoinCodeWrapper" class="hidden">
+            <label class="block text-slate-400 mb-1">Club Registration Code <span class="text-slate-500">(skip if invited by email)</span>:</label>
+            <input type="text" id="authJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-emerald-500/40 text-emerald-200 font-mono uppercase tracking-wider font-bold">
+          </div>
+          <button type="submit" id="authSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
+            Sign In
+          </button>
+        </form>
       </div>
     </div>
   </div>
@@ -857,12 +896,9 @@
         </div>
       </div>
 
-      <div class="border-t border-slate-700 pt-3 flex justify-between items-center text-[11px]">
-        <button onclick="useLocalSandboxCoach(&quot;Demo Coach&quot;)" class="text-emerald-400 underline font-semibold">
-          Try Local Sandbox Mode
-        </button>
-        <button onclick="handleLogout()" class="text-rose-400 underline">
-          Sign Out
+      <div class="border-t border-slate-700 pt-3 flex justify-end items-center text-[11px]">
+        <button type="button" onclick="handleLogout()" class="bg-rose-600/20 hover:bg-rose-600/35 text-rose-300 border border-rose-500/40 px-3 py-1.5 rounded-lg font-bold">
+          🚪 Sign Out
         </button>
       </div>
     </div>

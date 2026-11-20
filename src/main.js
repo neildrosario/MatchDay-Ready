@@ -6,7 +6,7 @@ import {
   toggleUiTheme,
   dismissGlassPreviewBanner
 } from './theme.js';
-import { appState, subscribeAppState } from './db.js';
+import { appState, getActiveUserProfile, subscribeAppState } from './db.js';
 import {
   initAuth,
   showAuthModal,
@@ -15,6 +15,7 @@ import {
   handleEmailAuthSubmit,
   handleGoogleSignIn,
   handleSwitchGoogleAccount,
+  handleSwitchAdminRoleView,
   useLocalSandboxCoach,
   handleLogout,
   handleSaveFirebaseConfigUI,
@@ -114,21 +115,23 @@ import { initSwipeNavigation } from './swipe.js';
 let currentView = 'pitch';
 
 function getVisibleViews() {
+  const activeProfile = getActiveUserProfile();
   const views = ['pitch'];
-  if (canViewSplitterTab(appState.userProfile)) views.push('splitter');
-  if (canViewStatsTab(appState.userProfile)) views.push('stats');
-  if (isClubAdmin(appState.userProfile)) views.push('admin');
+  if (canViewSplitterTab(activeProfile)) views.push('splitter');
+  if (canViewStatsTab(activeProfile)) views.push('stats');
+  if (isClubAdmin(activeProfile)) views.push('admin');
   return views;
 }
 
 export function switchView(view) {
-  if (view === 'admin' && !isClubAdmin(appState.userProfile)) {
+  const activeProfile = getActiveUserProfile();
+  if (view === 'admin' && !isClubAdmin(activeProfile)) {
     view = 'pitch';
   }
-  if (view === 'splitter' && !canViewSplitterTab(appState.userProfile)) {
+  if (view === 'splitter' && !canViewSplitterTab(activeProfile)) {
     view = 'pitch';
   }
-  if (view === 'stats' && !canViewStatsTab(appState.userProfile)) {
+  if (view === 'stats' && !canViewStatsTab(activeProfile)) {
     view = 'pitch';
   }
   currentView = view;
@@ -238,6 +241,7 @@ Object.assign(window, {
   handleEmailAuthSubmit,
   handleGoogleSignIn,
   handleSwitchGoogleAccount,
+  handleSwitchAdminRoleView,
   useLocalSandboxCoach,
   handleLogout,
   handleSaveFirebaseConfigUI,
@@ -280,15 +284,16 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPitch();
     renderMatchTimer();
     renderAdminCoachesPanel();
-    if (currentView === 'admin' && !isClubAdmin(appState.userProfile)) {
+    const activeProfile = getActiveUserProfile();
+    if (currentView === 'admin' && !isClubAdmin(activeProfile)) {
       switchView('pitch');
       return;
     }
-    if (currentView === 'splitter' && !canViewSplitterTab(appState.userProfile)) {
+    if (currentView === 'splitter' && !canViewSplitterTab(activeProfile)) {
       switchView('pitch');
       return;
     }
-    if (currentView === 'stats' && !canViewStatsTab(appState.userProfile)) {
+    if (currentView === 'stats' && !canViewStatsTab(activeProfile)) {
       switchView('pitch');
       return;
     }

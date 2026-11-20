@@ -1,5 +1,6 @@
 import {
   appState,
+  getActiveUserProfile,
   getSelectedTeam,
   getPlayerDisplayName,
   updateClubSettings,
@@ -71,13 +72,14 @@ export function renderAdminNavBadge() {
   const navStats = document.getElementById('nav-stats');
   const openShortcut = document.getElementById('settingsOpenAdminBtn');
   const clubSettingsAccordion = document.getElementById('clubSettingsAccordion');
-  const isAdmin = isClubAdmin(appState.userProfile);
+  const activeProfile = getActiveUserProfile();
+  const isAdmin = isClubAdmin(activeProfile);
 
   if (navSplitter) {
-    navSplitter.classList.toggle('hidden', !canViewSplitterTab(appState.userProfile));
+    navSplitter.classList.toggle('hidden', !canViewSplitterTab(activeProfile));
   }
   if (navStats) {
-    navStats.classList.toggle('hidden', !canViewStatsTab(appState.userProfile));
+    navStats.classList.toggle('hidden', !canViewStatsTab(activeProfile));
   }
   if (clubSettingsAccordion) {
     clubSettingsAccordion.classList.toggle('hidden', !isAdmin);
@@ -113,7 +115,7 @@ export function renderHeaderClubLogo() {
   if (!btn || !img || !placeholder) return;
 
   const logoUrl = appState.club?.logoDataUrl || '';
-  const isAdmin = isClubAdmin(appState.userProfile);
+  const isAdmin = isClubAdmin(getActiveUserProfile());
 
   if (logoUrl) {
     btn.classList.remove('hidden');
@@ -198,7 +200,7 @@ export function renderAdminDashboard() {
   const viewEl = document.getElementById('view-admin');
   if (!viewEl) return;
 
-  const isAdmin = isClubAdmin(appState.userProfile);
+  const isAdmin = isClubAdmin(getActiveUserProfile());
   if (!isAdmin) {
     viewEl.innerHTML = `
       <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 text-center text-xs text-slate-400">
@@ -716,6 +718,17 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
   };
 
   container.innerHTML = `
+    <!-- Quick Role Switch to My Age-Group Lead View -->
+    <div class="bg-sky-950/40 border border-sky-500/40 rounded-lg p-2.5 flex items-center justify-between gap-2 text-xs">
+      <div class="min-w-0">
+        <div class="font-bold text-sky-300 text-xs">📋 Coaching Your Own Age Group?</div>
+        <div class="text-[10px] text-slate-300">Switch to Lead View to see only your age-group teams (e.g. U10 White &amp; U10 Green).</div>
+      </div>
+      <button type="button" onclick="handleSwitchAdminRoleView('lead')" class="bg-sky-600 hover:bg-sky-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded shrink-0 shadow">
+        📋 Lead View
+      </button>
+    </div>
+
     <!-- Quick Join Code Strip -->
     <div class="bg-slate-800 border border-slate-700 rounded-lg p-2.5 flex items-center justify-between gap-2 text-xs">
       <div class="min-w-0">

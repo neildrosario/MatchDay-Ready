@@ -16,6 +16,8 @@ import {
 } from './firebase.js';
 import {
   appState,
+  getActiveUserProfile,
+  setAdminRoleView,
   ensureUserAndClubSeeded,
   startFirestoreSubscriptions,
   clearFirestoreSubscriptions,
@@ -148,7 +150,9 @@ export function initAuth() {
   onAuthStateChanged(auth, async user => {
     if (user) {
       appState.currentUser = user;
-      hideAuthModal();
+      appState.adminViewAsRole = 'admin';
+      clubHubOpenManually = false;
+      hideAuthModal(true);
       const { inviteId, email: expectedInviteEmail } = getPendingInviteHint();
       const codeHint = pendingSignupJoinCode || getJoinCodeFromUrlOrSession();
       const nameHint = pendingSignupDisplayName || user.displayName || '';
@@ -174,12 +178,16 @@ export function initAuth() {
       }
     } else {
       clearFirestoreSubscriptions();
+      clubHubOpenManually = false;
+      appState.adminViewAsRole = 'admin';
       appState.currentUser = null;
       appState.userProfile = null;
       appState.accessStatus = 'ready';
       appState.pendingJoinRequest = null;
       appState.authDiagnosticError = null;
       appState.inviteEmailMismatch = null;
+      appState.claimedInviteNotice = null;
+      toggleAuthMode('login');
       showAuthModal();
     }
     renderAuthStatusBanner();
@@ -191,6 +199,75 @@ export function showAuthModal() {
   const modal = document.getElementById('authModal');
   if (modal) modal.classList.remove('hidden');
 
+  const signedIn = Boolean(appState.currentUser);
+  const closeBtn = document.getElementById('authModalCloseBtn');
+  const signInPanel = document.getElementById('authSignInPanel');
+  const accountPanel = document.getElementById('authAccountPanel');
+  const titleEl = document.getElementById('authModalTitle');
+
+  if (closeBtn) closeBtn.classList.toggle('hidden', !signedIn && isFirebaseConfigured());
+  if (signInPanel) signInPanel.classList.toggle('hidden', signedIn);
+  if (accountPanel) accountPanel.classList.toggle('hidden', !signedIn);
+
+  if (signedIn) {
+    if (titleEl) titleEl.innerText = 'Account & Role';
+    const acctName = document.getElementById('authAccountName');
+    const acctEmail = document.getElementById('authAccountEmail');
+    const acctRoleBadge = document.getElementById('authAccountRoleBadge');
+    const adminSwitchBox = document.getElementById('authAdminRoleSwitchBox');
+    const btnAdmin = document.getElementById('authRoleSwitchAdminBtn');
+    const btnLead = document.getElementById('authRoleSwitchLeadBtn');
+    const leadDesc = document.getElementById('authRoleSwitchLeadDesc');
+
+    const activeProfile = getActiveUserProfile();
+    const meta = getRoleMeta(activeProfile?.role || 'viewer');
+    if (acctName) {
+      acctName.innerText =
+        appState.userProfile?.displayName || appState.currentUser?.displayName || 'Coach';
+    }
+    if (acctEmail) {
+      acctEmail.innerText = appState.currentUser?.email || appState.userProfile?.email || '';
+    }
+    if (acctRoleBadge) {
+      acctRoleBadge.innerText = `${meta.icon} ${meta.label}`;
+      acctRoleBadge.className = `inline-block text-[10px] px-2 py-0.5 rounded border font-bold ${meta.badgeClass}`;
+    }
+
+    const isRealAdmin = isClubAdmin(appState.userProfile);
+    if (adminSwitchBox) adminSwitchBox.classList.toggle('hidden', !isRealAdmin);
+    if (isRealAdmin) {
+      const inLeadView = appState.adminViewAsRole === 'lead';
+      if (btnAdmin) {
+        btnAdmin.className = !inLeadView
+          ? 'flex-1 py-2 px-2 rounded-lg font-bold text-xs bg-purple-600 text-white border border-purple-400 shadow'
+          : 'flex-1 py-2 px-2 rounded-lg font-semibold text-xs bg-slate-900 text-slate-300 border border-slate-700 hover:border-slate-500';
+      }
+      if (btnLead) {
+        btnLead.className = inLeadView
+          ? 'flex-1 py-2 px-2 rounded-lg font-bold text-xs bg-sky-600 text-white border border-sky-400 shadow'
+          : 'flex-1 py-2 px-2 rounded-lg font-semibold text-xs bg-slate-900 text-slate-300 border border-slate-700 hover:border-slate-500';
+      }
+      if (leadDesc) {
+        const leadPreview = getActiveUserProfile()?.isRolePreview
+          ? getActiveUserProfile()
+          : null;
+        const leadGroups =
+          leadPreview?.assignedAgeGroups ||
+          (appState.userProfile?.assignedAgeGroups?.length
+            ? appState.userProfile.assignedAgeGroups
+            : ['U10']);
+        const leadTeams = (appState.allClubTeams || [])
+          .filter(t => leadGroups.includes(t.ageGroup))
+          .map(t => t.name);
+        leadDesc.innerText =
+          leadTeams.length > 0
+            ? `Lead View scopes your app to ${leadGroups.join(', ')}: ${leadTeams.join(' & ')}.`
+            : `Lead View scopes your app to your assigned age group (${leadGroups.join(', ')}).`;
+      }
+    }
+    return;
+  }
+
   const { inviteId, email: inviteEmail } = getPendingInviteHint();
   const urlCode = getJoinCodeFromUrlOrSession();
 
@@ -198,7 +275,6 @@ export function showAuthModal() {
   const inviteBannerText = document.getElementById('authInviteBannerText');
   const emailInput = document.getElementById('authEmailInput');
   const joinCodeInput = document.getElementById('authJoinCodeInput');
-  const clubHubBtn = document.getElementById('authClubHubBtn');
 
   if (inviteBanner && inviteBannerText) {
     if (inviteId) {
@@ -219,20 +295,28 @@ export function showAuthModal() {
     joinCodeInput.value = urlCode;
   }
 
-  // Only show "Switch Club / Join or Register" when already signed in
-  if (clubHubBtn) {
-    clubHubBtn.classList.toggle('hidden', !appState.currentUser);
-  }
-
   // If user arrived via a Club Registration Code link (?code=...) without an email invite, default to Register tab
-  if (urlCode && !inviteId && !appState.currentUser) {
+  if (urlCode && !inviteId) {
     toggleAuthMode('signup');
+  } else {
+    toggleAuthMode(authMode);
   }
 }
 
-export function hideAuthModal() {
+export function hideAuthModal(force = false) {
+  if (!force && isFirebaseConfigured() && !appState.currentUser) {
+    return;
+  }
   const modal = document.getElementById('authModal');
   if (modal) modal.classList.add('hidden');
+}
+
+export function handleSwitchAdminRoleView(mode) {
+  setAdminRoleView(mode);
+  hideAuthModal(true);
+  if (mode === 'lead' && typeof window.switchView === 'function') {
+    window.switchView('pitch');
+  }
 }
 
 export function toggleAuthMode(mode) {
@@ -374,13 +458,18 @@ export async function handleSwitchGoogleAccount() {
 }
 
 export function useLocalSandboxCoach(name = "Neil D'Rosario") {
+  // Block sandbox bypass whenever Firebase Auth is configured
+  if (isFirebaseConfigured()) {
+    console.warn('Local Sandbox mode is disabled when Firebase Authentication is enabled.');
+    return;
+  }
   clearFirestoreSubscriptions();
   appState.currentUser = {
     uid: 'local_coach_1',
     email: 'neil@straffanafc.ie',
     displayName: name
   };
-  hideAuthModal();
+  hideAuthModal(true);
   hydrateAppStateFromLocalStore();
   renderAuthStatusBanner();
   renderAccessGate();
@@ -388,11 +477,30 @@ export function useLocalSandboxCoach(name = "Neil D'Rosario") {
 
 export async function handleLogout() {
   const { auth, configured } = getFirebaseServices();
-  if (configured && auth && appState.mode === 'firebase') {
-    await signOut(auth);
-  } else {
-    showAuthModal();
+  clearFirestoreSubscriptions();
+  clubHubOpenManually = false;
+  appState.adminViewAsRole = 'admin';
+  clearPendingAuthHints();
+
+  if (configured && auth) {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Sign out error:', err);
+    }
   }
+
+  appState.currentUser = null;
+  appState.userProfile = null;
+  appState.accessStatus = 'ready';
+  appState.pendingJoinRequest = null;
+  appState.authDiagnosticError = null;
+  appState.inviteEmailMismatch = null;
+  appState.claimedInviteNotice = null;
+  toggleAuthMode('login');
+  renderAccessGate();
+  renderAuthStatusBanner();
+  showAuthModal();
 }
 
 export function handleSaveFirebaseConfigUI() {
@@ -796,11 +904,31 @@ export function renderAccessGate() {
     if (hasNotice) inviteText.innerText = appState.claimedInviteNotice;
   }
 
+  // Admin viewing as Age-Group Lead banner (one-tap return to full Admin mode)
+  const adminLeadBanner = document.getElementById('adminLeadModeBanner');
+  const adminLeadText = document.getElementById('adminLeadModeText');
+  if (adminLeadBanner && adminLeadText) {
+    const activeProfile = getActiveUserProfile();
+    const inLeadPreview =
+      appState.accessStatus === 'ready' &&
+      isClubAdmin(appState.userProfile) &&
+      activeProfile?.isRolePreview === true;
+    adminLeadBanner.classList.toggle('hidden', !inLeadPreview);
+    if (inLeadPreview) {
+      const teamNames = (appState.teams || []).map(t => t.name).join(' & ');
+      const agLabel = (activeProfile.assignedAgeGroups || []).join(', ') || 'Age Group';
+      adminLeadText.innerText = teamNames
+        ? `Lead View (${agLabel}): ${teamNames}`
+        : `Lead View (${agLabel})`;
+    }
+  }
+
   // Read-only viewer banner
+  const activeProfile = getActiveUserProfile();
   const viewerBanner = document.getElementById('viewerReadOnlyBanner');
   if (viewerBanner) {
     const showViewer =
-      appState.accessStatus === 'ready' && isViewer(appState.userProfile);
+      appState.accessStatus === 'ready' && isViewer(activeProfile);
     viewerBanner.classList.toggle('hidden', !showViewer);
   }
 
@@ -808,9 +936,9 @@ export function renderAccessGate() {
   const leadReqBanner = document.getElementById('leadTeamRequestsBanner');
   const leadReqList = document.getElementById('leadTeamRequestsList');
   if (leadReqBanner && leadReqList) {
-    const isLead = appState.accessStatus === 'ready' && isAgeGroupLead(appState.userProfile);
+    const isLead = appState.accessStatus === 'ready' && isAgeGroupLead(activeProfile);
     const approvable = isLead
-      ? getApprovableTeamRequests(appState.userProfile, appState.allClubTeamRequests)
+      ? getApprovableTeamRequests(activeProfile, appState.allClubTeamRequests)
       : [];
     leadReqBanner.classList.toggle('hidden', approvable.length === 0);
     if (approvable.length > 0) {
@@ -838,8 +966,8 @@ export function renderAccessGate() {
     const showNoTeams =
       appState.accessStatus === 'ready' &&
       appState.syncState === 'synced' &&
-      Boolean(appState.userProfile) &&
-      !isClubAdmin(appState.userProfile) &&
+      Boolean(activeProfile) &&
+      !isClubAdmin(activeProfile) &&
       appState.teams.length === 0;
     noTeamsBanner.classList.toggle('hidden', !showNoTeams);
     // Keep pitch/match details hidden while coach has 0 assigned teams so unassigned teams' data isn't exposed
@@ -1039,12 +1167,13 @@ export function renderAuthStatusBanner() {
   }
 
   if (coachNameEl) {
+    const activeProfile = getActiveUserProfile();
     const name =
-      appState.userProfile?.displayName ||
+      activeProfile?.displayName ||
       appState.currentUser?.displayName ||
       appState.currentUser?.email ||
       'Coach';
-    const meta = getRoleMeta(appState.userProfile?.role || 'viewer');
+    const meta = getRoleMeta(activeProfile?.role || 'viewer');
     coachNameEl.innerText = `${meta.icon} ${name} (${meta.short})`;
   }
 }

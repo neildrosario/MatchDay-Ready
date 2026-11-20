@@ -1,5 +1,6 @@
 import {
   appState,
+  getActiveUserProfile,
   getSelectedTeam,
   getPlayerDisplayName,
   getMatchId,
@@ -151,7 +152,7 @@ export function resetSplitterToPrimary() {
 export async function handleQuickAddAgeGroupTeam() {
   const input = document.getElementById('splitterNewTeamInput');
   const { ageGroup } = getAgeGroupContext();
-  if (!canCreateTeamInAgeGroup(appState.userProfile, ageGroup)) {
+  if (!canCreateTeamInAgeGroup(getActiveUserProfile(), ageGroup)) {
     return alert('Only a Club Admin or Age-Group Lead for this age group can add new teams.');
   }
   const currentTeam = getSelectedTeam();
@@ -175,7 +176,7 @@ export async function handleQuickAddAgeGroupTeam() {
 
 export async function handlePublishSquadSplit() {
   const { ageGroup, teams, players } = getAgeGroupContext();
-  if (!canPublishSquadSplit(appState.userProfile, ageGroup, appState.allClubTeams)) {
+  if (!canPublishSquadSplit(getActiveUserProfile(), ageGroup, appState.allClubTeams)) {
     return alert(
       `Only a Club Admin, ${ageGroup} Age-Group Lead, or coach assigned to all ${ageGroup} teams can publish a squad split.`
     );
@@ -254,8 +255,9 @@ export function renderSquadSplitter() {
 
   const { ageGroup, teams, players } = getAgeGroupContext();
   const draft = ensureDraftInitialized();
-  const canPublish = canPublishSquadSplit(appState.userProfile, ageGroup, appState.allClubTeams);
-  const canAddTeam = canCreateTeamInAgeGroup(appState.userProfile, ageGroup);
+  const activeProfile = getActiveUserProfile();
+  const canPublish = canPublishSquadSplit(activeProfile, ageGroup, appState.allClubTeams);
+  const canAddTeam = canCreateTeamInAgeGroup(activeProfile, ageGroup);
 
   const permBanner = document.getElementById('splitterPermissionBanner');
   if (permBanner) {

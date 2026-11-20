@@ -2,6 +2,7 @@ import {
   getPositionsForFormatAndShape,
   getMatchPeriods,
   appState,
+  getActiveUserProfile,
   getSelectedTeam,
   getTeamPlayers,
   getPlayerDisplayName,
@@ -65,7 +66,8 @@ export function renderStats() {
   });
 
   const tbody = document.getElementById('statsBody');
-  const canEditRoster = canEditTeam(appState.userProfile, currentTeam, appState.allClubTeams);
+  const activeProfile = getActiveUserProfile();
+  const canEditRoster = canEditTeam(activeProfile, currentTeam, appState.allClubTeams);
 
   const rosterCard = document.getElementById('squadRosterEditCard');
   if (rosterCard) rosterCard.classList.toggle('hidden', !canEditRoster);
@@ -80,7 +82,7 @@ export function renderStats() {
         const isPrimary = !pObj || pObj.primaryTeamId === currentTeam.teamId;
         const isShared = pObj && (pObj.allowedTeamIds || []).length > 1;
         const pref = pObj?.preferredGroup || 'ANY';
-        const allowDelete = pObj && canDeletePlayer(appState.userProfile, pObj, appState.allClubTeams);
+        const allowDelete = pObj && canDeletePlayer(getActiveUserProfile(), pObj, appState.allClubTeams);
         return `
           <tr>
             <td class="p-2 font-semibold text-white">
@@ -226,7 +228,7 @@ export function renderSharedRosterManager() {
 
 export async function handleAddPlayerUI() {
   const currentTeam = getSelectedTeam();
-  if (!canEditTeam(appState.userProfile, currentTeam, appState.allClubTeams)) {
+  if (!canEditTeam(getActiveUserProfile(), currentTeam, appState.allClubTeams)) {
     return alert('Read-only viewers cannot edit the squad roster.');
   }
   const input = document.getElementById('newPlayerName');
@@ -270,7 +272,7 @@ export async function handleCreateTeamUI() {
   const ageGroup = ageInput?.value.trim() || 'U10';
   const defaultFormation = fmtSelect?.value || '7v7';
 
-  if (!canCreateTeamInAgeGroup(appState.userProfile, ageGroup)) {
+  if (!canCreateTeamInAgeGroup(getActiveUserProfile(), ageGroup)) {
     return alert('Only a Club Admin or Age-Group Lead for that age group can create teams.');
   }
 
@@ -430,7 +432,7 @@ export async function handleBetaSheetDbOrJsonImport() {
  */
 export async function handleBulkAddPlayersUI() {
   const currentTeam = getSelectedTeam();
-  if (!canEditTeam(appState.userProfile, currentTeam, appState.allClubTeams)) {
+  if (!canEditTeam(getActiveUserProfile(), currentTeam, appState.allClubTeams)) {
     return alert('Read-only viewers cannot import players.');
   }
   const textarea = document.getElementById('bulkPlayersTextarea');
@@ -465,7 +467,7 @@ export async function handleBulkAddPlayersUI() {
  */
 export async function handleClearTeamPlayersUI() {
   const currentTeam = getSelectedTeam();
-  if (!canEditTeam(appState.userProfile, currentTeam, appState.allClubTeams)) {
+  if (!canEditTeam(getActiveUserProfile(), currentTeam, appState.allClubTeams)) {
     return alert('Read-only viewers cannot clear players.');
   }
   if (
@@ -493,8 +495,9 @@ export function renderAdminCoachesPanel() {
   const joinCodeBadge = document.getElementById('adminJoinCodeDisplay');
   const joinCodeToggleBtn = document.getElementById('adminJoinCodeToggleBtn');
 
-  const isAdmin = isClubAdmin(appState.userProfile);
-  const canCreateTeam = canCreateTeamInAgeGroup(appState.userProfile);
+  const activeProfile = getActiveUserProfile();
+  const isAdmin = isClubAdmin(activeProfile);
+  const canCreateTeam = canCreateTeamInAgeGroup(activeProfile);
 
   if (addTeamSection) {
     addTeamSection.classList.toggle('hidden', !canCreateTeam);

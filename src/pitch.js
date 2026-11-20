@@ -8,6 +8,7 @@ import {
   getPeriodLongLabel,
   getPeriodUnitLabel,
   appState,
+  getActiveUserProfile,
   getSelectedTeam,
   getTeamPlayers,
   getPlayerDisplayName,
@@ -28,7 +29,7 @@ import { canEditTeam, isClubAdmin } from './permissions.js';
 
 function canEditCurrentTeam() {
   if (appState.mode === 'local' && !appState.userProfile) return true;
-  return canEditTeam(appState.userProfile, getSelectedTeam(), appState.allClubTeams);
+  return canEditTeam(getActiveUserProfile(), getSelectedTeam(), appState.allClubTeams);
 }
 
 const ROLE_BADGE_TEXT = {
@@ -50,12 +51,13 @@ export function getTeamSize() {
 }
 
 export function renderHeaderAndMatchBar() {
-  // Team selector dropdown (strictly scoped to accessible teams for non-admins)
+  // Team selector dropdown (strictly scoped to accessible teams for non-admins & Lead View)
   const teamSelect = document.getElementById('teamSelector');
   if (teamSelect) {
+    const activeProfile = getActiveUserProfile();
     const isUnassignedCoach =
-      Boolean(appState.userProfile) &&
-      !isClubAdmin(appState.userProfile) &&
+      Boolean(activeProfile) &&
+      !isClubAdmin(activeProfile) &&
       appState.teams.length === 0;
     if (isUnassignedCoach) {
       teamSelect.disabled = true;

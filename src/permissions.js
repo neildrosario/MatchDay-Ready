@@ -178,6 +178,44 @@ export function getApprovableTeamRequests(profile, allTeamRequests = []) {
   );
 }
 
+/**
+ * Allows a Club Admin to optionally switch their active UI view into Age-Group Lead mode
+ * (e.g. seeing only their own U10 teams: U10 White & U10 Green) without losing real Admin
+ * permissions in Firestore. Non-admins always receive their exact profile unchanged.
+ */
+export function getEffectiveUserProfile(profile, viewAsRole = 'admin', allClubTeams = []) {
+  if (!profile || !isClubAdmin(profile) || viewAsRole !== 'lead') {
+    return profile;
+  }
+
+  const teams = allClubTeams || [];
+  let leadAgeGroups = Array.isArray(profile.assignedAgeGroups)
+    ? profile.assignedAgeGroups.filter(Boolean)
+    : [];
+
+  if (leadAgeGroups.length === 0) {
+    if (teams.some(t => t && t.ageGroup === 'U10')) {
+      leadAgeGroups = ['U10'];
+    } else if (teams.length > 0 && teams[0].ageGroup) {
+      leadAgeGroups = [teams[0].ageGroup];
+    }
+  }
+
+  const ageGroupSet = new Set(leadAgeGroups);
+  const leadTeamIds = teams
+    .filter(t => t && ageGroupSet.has(t.ageGroup))
+    .map(t => t.teamId);
+
+  return {
+    ...profile,
+    role: 'lead',
+    actualRole: 'admin',
+    isRolePreview: true,
+    assignedAgeGroups: leadAgeGroups,
+    assignedTeamIds: leadTeamIds
+  };
+}
+
 export function canPublishSquadSplit(profile, ageGroup, allClubTeams = []) {
   if (!isProfileActive(profile)) return false;
   if (profile.role === 'viewer') return false;
