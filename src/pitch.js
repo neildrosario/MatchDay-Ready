@@ -24,7 +24,7 @@ import {
   remapLineupToNewPositions,
   generateFairPeriodLineups
 } from './engine.js';
-import { canEditTeam } from './permissions.js';
+import { canEditTeam, isClubAdmin } from './permissions.js';
 
 function canEditCurrentTeam() {
   if (appState.mode === 'local' && !appState.userProfile) return true;
@@ -50,16 +50,26 @@ export function getTeamSize() {
 }
 
 export function renderHeaderAndMatchBar() {
-  // Team selector dropdown
+  // Team selector dropdown (strictly scoped to accessible teams for non-admins)
   const teamSelect = document.getElementById('teamSelector');
   if (teamSelect) {
-    const teams = appState.teams.length > 0 ? appState.teams : appState.allClubTeams;
-    teamSelect.innerHTML = teams
-      .map(t => {
-        const selected = t.teamId === appState.selectedTeamId ? 'selected' : '';
-        return `<option value="${t.teamId}" ${selected}>🛡️ ${t.name} (${t.ageGroup})</option>`;
-      })
-      .join('');
+    const isUnassignedCoach =
+      Boolean(appState.userProfile) &&
+      !isClubAdmin(appState.userProfile) &&
+      appState.teams.length === 0;
+    if (isUnassignedCoach) {
+      teamSelect.disabled = true;
+      teamSelect.innerHTML = `<option value="">🔒 No team assigned yet</option>`;
+    } else {
+      teamSelect.disabled = false;
+      const teams = appState.teams.length > 0 ? appState.teams : appState.allClubTeams;
+      teamSelect.innerHTML = teams
+        .map(t => {
+          const selected = t.teamId === appState.selectedTeamId ? 'selected' : '';
+          return `<option value="${t.teamId}" ${selected}>🛡️ ${t.name} (${t.ageGroup})</option>`;
+        })
+        .join('');
+    }
   }
 
   const clubBadge = document.getElementById('clubTitleBadge');

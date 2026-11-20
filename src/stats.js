@@ -868,12 +868,12 @@ export async function handleCopyJoinCodeUI() {
   if (!code) return alert('No join code configured yet.');
   const clubName = appState.club?.shortName || 'MatchDay Ready';
   const link = `${window.location.origin}/?code=${encodeURIComponent(code)}`;
-  const text = `⚽ Join *${clubName}* on MatchDay Ready!\n\n1. Open: ${link}\n2. Sign in with Google or Email\n3. Enter Join Code: *${code}*\n(Your Club Admin will approve your access right away!)`;
+  const text = `⚽ Join *${clubName}* on MatchDay Ready!\n\n1. Open: ${link}\n2. Sign in with Google or register with your email\n3. Club Registration Code: *${code}*\n4. Request access to your team(s) so your Admin or Age-Group Lead can unlock your squad!`;
   try {
     await navigator.clipboard.writeText(text);
-    alert(`📋 Copied Join Code (${code}) & invite link for WhatsApp!`);
+    alert(`📋 Copied Club Registration Code (${code}) & link for WhatsApp!`);
   } catch (_) {
-    prompt('Copy your Club Join Code message:', text);
+    prompt('Copy your Club Registration Code message:', text);
   }
 }
 

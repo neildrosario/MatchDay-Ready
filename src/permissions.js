@@ -153,6 +153,31 @@ export function canCreateTeamInAgeGroup(profile, ageGroup = null) {
   return false;
 }
 
+export function canRequestTeamAccess(profile) {
+  if (!isProfileActive(profile)) return false;
+  return profile.role !== 'admin';
+}
+
+export function canApproveTeamRequest(profile, teamRequest) {
+  if (!isProfileActive(profile) || !teamRequest) return false;
+  if (profile.clubId && teamRequest.clubId && profile.clubId !== teamRequest.clubId) {
+    return false;
+  }
+  if (profile.role === 'admin') return true;
+  if (profile.role === 'lead') {
+    const groups = Array.isArray(profile.assignedAgeGroups) ? profile.assignedAgeGroups : [];
+    return Boolean(teamRequest.ageGroup) && groups.includes(teamRequest.ageGroup);
+  }
+  return false;
+}
+
+export function getApprovableTeamRequests(profile, allTeamRequests = []) {
+  if (!isProfileActive(profile)) return [];
+  return (allTeamRequests || []).filter(
+    r => r && r.status === 'pending' && canApproveTeamRequest(profile, r)
+  );
+}
+
 export function canPublishSquadSplit(profile, ageGroup, allClubTeams = []) {
   if (!isProfileActive(profile)) return false;
   if (profile.role === 'viewer') return false;

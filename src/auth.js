@@ -3,6 +3,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   updateProfile
 } from 'firebase/auth';
@@ -18,8 +20,12 @@ import {
   startFirestoreSubscriptions,
   clearFirestoreSubscriptions,
   hydrateAppStateFromLocalStore,
-  submitJoinCodeRequest,
+  joinClubWithCode,
   cancelPendingJoinRequest,
+  requestTeamAccess,
+  cancelTeamAccessRequest,
+  approveTeamAccessRequest,
+  rejectTeamAccessRequest,
   registerNewClub,
   switchActiveClub,
   claimAdditionalInvite,
@@ -27,22 +33,93 @@ import {
   normalizeJoinCode,
   notifyAppState
 } from './db.js';
-import { getRoleMeta, isViewer } from './permissions.js';
+import {
+  getRoleMeta,
+  isViewer,
+  isClubAdmin,
+  isAgeGroupLead,
+  canRequestTeamAccess,
+  getApprovableTeamRequests
+} from './permissions.js';
 
 let authMode = 'login'; // 'login' | 'signup'
 let clubHubOpenManually = false;
 let onboardingTab = 'join'; // 'join' | 'create'
+let pendingSignupDisplayName = '';
+let pendingSignupJoinCode = '';
 
-function getJoinCodeFromUrl() {
+const SESSION_INVITE_ID_KEY = 'mdr_pending_invite_id';
+const SESSION_INVITE_EMAIL_KEY = 'mdr_pending_invite_email';
+const SESSION_JOIN_CODE_KEY = 'mdr_pending_join_code';
+
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function captureAuthUrlHints() {
   try {
     const params = new URLSearchParams(window.location.search);
-    return normalizeJoinCode(params.get('code') || params.get('join') || '');
+    const inv = (params.get('invite') || '').trim();
+    const invEmail = (params.get('email') || '').trim().toLowerCase();
+    const code = normalizeJoinCode(params.get('code') || params.get('join') || '');
+    if (inv) sessionStorage.setItem(SESSION_INVITE_ID_KEY, inv);
+    if (invEmail) sessionStorage.setItem(SESSION_INVITE_EMAIL_KEY, invEmail);
+    if (code) sessionStorage.setItem(SESSION_JOIN_CODE_KEY, code);
+  } catch (_) {}
+}
+
+function getPendingInviteHint() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const inviteId = (params.get('invite') || sessionStorage.getItem(SESSION_INVITE_ID_KEY) || '').trim();
+    const email = (params.get('email') || sessionStorage.getItem(SESSION_INVITE_EMAIL_KEY) || '').trim().toLowerCase();
+    return { inviteId, email };
+  } catch (_) {
+    return { inviteId: '', email: '' };
+  }
+}
+
+function getJoinCodeFromUrlOrSession() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return normalizeJoinCode(
+      params.get('code') ||
+        params.get('join') ||
+        sessionStorage.getItem(SESSION_JOIN_CODE_KEY) ||
+        ''
+    );
   } catch (_) {
     return '';
   }
 }
 
+function clearPendingAuthHints() {
+  pendingSignupDisplayName = '';
+  pendingSignupJoinCode = '';
+  try {
+    sessionStorage.removeItem(SESSION_INVITE_ID_KEY);
+    sessionStorage.removeItem(SESSION_INVITE_EMAIL_KEY);
+    sessionStorage.removeItem(SESSION_JOIN_CODE_KEY);
+    const url = new URL(window.location.href);
+    let changed = false;
+    ['invite', 'email', 'code', 'join'].forEach(k => {
+      if (url.searchParams.has(k)) {
+        url.searchParams.delete(k);
+        changed = true;
+      }
+    });
+    if (changed) {
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    }
+  } catch (_) {}
+}
+
 export function initAuth() {
+  captureAuthUrlHints();
   const { auth, configured } = getFirebaseServices();
 
   if (!configured || !auth) {
@@ -58,17 +135,39 @@ export function initAuth() {
     return;
   }
 
+  // Handle mobile Google redirect results cleanly if signInWithRedirect was used
+  getRedirectResult(auth).catch(err => {
+    console.warn('Google redirect sign-in note:', err);
+    const errEl = document.getElementById('authErrorText');
+    if (errEl && err?.message) {
+      errEl.innerText = err.message;
+      errEl.classList.remove('hidden');
+    }
+  });
+
   onAuthStateChanged(auth, async user => {
     if (user) {
       appState.currentUser = user;
       hideAuthModal();
+      const { inviteId, email: expectedInviteEmail } = getPendingInviteHint();
+      const codeHint = pendingSignupJoinCode || getJoinCodeFromUrlOrSession();
+      const nameHint = pendingSignupDisplayName || user.displayName || '';
+
       try {
-        const res = await ensureUserAndClubSeeded(user);
+        const res = await ensureUserAndClubSeeded(user, {
+          inviteIdHint: inviteId,
+          expectedInviteEmail,
+          joinCodeHint: codeHint,
+          displayNameHint: nameHint
+        });
         if (res?.accessStatus === 'ready') {
+          clearPendingAuthHints();
           startFirestoreSubscriptions(user);
         }
       } catch (e) {
         console.error('Error initializing club data in Firestore:', e);
+        appState.authDiagnosticError =
+          e?.message || 'Error connecting to Firestore. Check your internet connection or club permissions.';
         appState.accessStatus = 'needs_onboarding';
         appState.syncState = 'error';
         notifyAppState();
@@ -79,6 +178,8 @@ export function initAuth() {
       appState.userProfile = null;
       appState.accessStatus = 'ready';
       appState.pendingJoinRequest = null;
+      appState.authDiagnosticError = null;
+      appState.inviteEmailMismatch = null;
       showAuthModal();
     }
     renderAuthStatusBanner();
@@ -89,6 +190,44 @@ export function initAuth() {
 export function showAuthModal() {
   const modal = document.getElementById('authModal');
   if (modal) modal.classList.remove('hidden');
+
+  const { inviteId, email: inviteEmail } = getPendingInviteHint();
+  const urlCode = getJoinCodeFromUrlOrSession();
+
+  const inviteBanner = document.getElementById('authInviteBanner');
+  const inviteBannerText = document.getElementById('authInviteBannerText');
+  const emailInput = document.getElementById('authEmailInput');
+  const joinCodeInput = document.getElementById('authJoinCodeInput');
+  const clubHubBtn = document.getElementById('authClubHubBtn');
+
+  if (inviteBanner && inviteBannerText) {
+    if (inviteId) {
+      inviteBanner.classList.remove('hidden');
+      inviteBannerText.innerText = inviteEmail
+        ? `Pre-authorized invite for ${inviteEmail} — tap Continue with Google (or sign in) to enter immediately. No registration code needed!`
+        : 'You have a pre-authorized coach invite! Sign in with Google SSO or your invited email — no registration code needed.';
+    } else {
+      inviteBanner.classList.add('hidden');
+    }
+  }
+
+  if (emailInput && !emailInput.value && inviteEmail) {
+    emailInput.value = inviteEmail;
+  }
+
+  if (joinCodeInput && !joinCodeInput.value && urlCode) {
+    joinCodeInput.value = urlCode;
+  }
+
+  // Only show "Switch Club / Join or Register" when already signed in
+  if (clubHubBtn) {
+    clubHubBtn.classList.toggle('hidden', !appState.currentUser);
+  }
+
+  // If user arrived via a Club Registration Code link (?code=...) without an email invite, default to Register tab
+  if (urlCode && !inviteId && !appState.currentUser) {
+    toggleAuthMode('signup');
+  }
 }
 
 export function hideAuthModal() {
@@ -100,6 +239,7 @@ export function toggleAuthMode(mode) {
   authMode = mode;
   const titleEl = document.getElementById('authModalTitle');
   const nameWrap = document.getElementById('authNameWrapper');
+  const codeWrap = document.getElementById('authJoinCodeWrapper');
   const submitBtn = document.getElementById('authSubmitBtn');
   const tabLogin = document.getElementById('authTabLogin');
   const tabSignup = document.getElementById('authTabSignup');
@@ -107,12 +247,14 @@ export function toggleAuthMode(mode) {
   if (mode === 'signup') {
     if (titleEl) titleEl.innerText = 'Register Coach Account';
     if (nameWrap) nameWrap.classList.remove('hidden');
-    if (submitBtn) submitBtn.innerText = 'Create Coach Account';
+    if (codeWrap) codeWrap.classList.remove('hidden');
+    if (submitBtn) submitBtn.innerText = 'Create Coach Profile';
     if (tabSignup) tabSignup.className = 'flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white';
     if (tabLogin) tabLogin.className = 'flex-1 py-1.5 rounded font-bold text-xs text-slate-400';
   } else {
     if (titleEl) titleEl.innerText = 'Coach Sign In';
     if (nameWrap) nameWrap.classList.add('hidden');
+    if (codeWrap) codeWrap.classList.add('hidden');
     if (submitBtn) submitBtn.innerText = 'Sign In';
     if (tabLogin) tabLogin.className = 'flex-1 py-1.5 rounded font-bold text-xs bg-emerald-600 text-white';
     if (tabSignup) tabSignup.className = 'flex-1 py-1.5 rounded font-bold text-xs text-slate-400';
@@ -125,6 +267,7 @@ export async function handleEmailAuthSubmit(event) {
   const email = document.getElementById('authEmailInput')?.value.trim();
   const password = document.getElementById('authPasswordInput')?.value;
   const displayName = document.getElementById('authNameInput')?.value.trim();
+  const joinCode = normalizeJoinCode(document.getElementById('authJoinCodeInput')?.value || '');
   const errEl = document.getElementById('authErrorText');
 
   if (errEl) errEl.classList.add('hidden');
@@ -144,15 +287,27 @@ export async function handleEmailAuthSubmit(event) {
 
   try {
     if (authMode === 'signup') {
+      // Save name & registration code BEFORE creating account so onAuthStateChanged reads them immediately
+      pendingSignupDisplayName = displayName || '';
+      pendingSignupJoinCode = joinCode || '';
+      if (joinCode) {
+        try {
+          sessionStorage.setItem(SESSION_JOIN_CODE_KEY, joinCode);
+        } catch (_) {}
+      }
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       if (displayName) {
-        await updateProfile(cred.user, { displayName });
+        try {
+          await updateProfile(cred.user, { displayName });
+        } catch (_) {}
       }
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
     hideAuthModal();
   } catch (e) {
+    pendingSignupDisplayName = '';
+    pendingSignupJoinCode = '';
     if (errEl) {
       errEl.innerText = e.message || 'Authentication failed.';
       errEl.classList.remove('hidden');
@@ -173,15 +328,49 @@ export async function handleGoogleSignIn() {
     return;
   }
 
+  // Persist any join code typed into the Register form before launching Google SSO
+  const typedCode = normalizeJoinCode(document.getElementById('authJoinCodeInput')?.value || '');
+  if (typedCode) {
+    pendingSignupJoinCode = typedCode;
+    try {
+      sessionStorage.setItem(SESSION_JOIN_CODE_KEY, typedCode);
+    } catch (_) {}
+  }
+
   try {
     await signInWithPopup(auth, googleProvider);
     hideAuthModal();
   } catch (e) {
+    // Mobile/Safari in-app browsers often block popups -> seamlessly fall back to redirect
+    if (
+      e?.code === 'auth/popup-blocked' ||
+      e?.code === 'auth/operation-not-supported-in-this-environment'
+    ) {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      } catch (redirErr) {
+        if (errEl) {
+          errEl.innerText = redirErr.message || 'Google Sign-In redirect failed.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+    }
     if (errEl) {
       errEl.innerText = e.message || 'Google Sign-In failed.';
       errEl.classList.remove('hidden');
     }
   }
+}
+
+export async function handleSwitchGoogleAccount() {
+  const { auth, configured } = getFirebaseServices();
+  if (!configured || !auth) return;
+  try {
+    await signOut(auth);
+  } catch (_) {}
+  await handleGoogleSignIn();
 }
 
 export function useLocalSandboxCoach(name = "Neil D'Rosario") {
@@ -227,9 +416,13 @@ export function handleDisconnectFirebaseUI() {
   window.location.reload();
 }
 
-// --- MILESTONE 13 & 15: MULTI-CLUB ACCESS GATE, SELF-ONBOARDING & CLUB SWITCHER ---
+// --- MULTI-CLUB ACCESS GATE, INSTANT JOIN-CODE REGISTRATION, TEAM REQUESTS & CLUB SWITCHER ---
 
 export function openClubHubModal(defaultTab = 'join') {
+  if (!appState.currentUser && appState.mode === 'firebase') {
+    showAuthModal();
+    return;
+  }
   clubHubOpenManually = true;
   onboardingTab = defaultTab;
   hideAuthModal();
@@ -264,7 +457,7 @@ export function renderClubSwitcher() {
       .map(m => {
         const selected = m.clubId === appState.userProfile?.clubId ? 'selected' : '';
         const meta = getRoleMeta(m.role);
-        return `<option value="${m.clubId}" ${selected}>🏟️ ${m.clubName || m.clubId} (${meta.short})</option>`;
+        return `<option value="${m.clubId}" ${selected}>🏟️ ${escapeHtml(m.clubName || m.clubId)} (${meta.short})</option>`;
       })
       .join('');
   } else if (badgeBtn && switcherSel) {
@@ -292,6 +485,7 @@ export async function handleClaimAdditionalInviteUI(inviteId) {
   try {
     await claimAdditionalInvite(inviteId);
     clubHubOpenManually = false;
+    clearPendingAuthHints();
     renderAccessGate();
     renderClubSwitcher();
   } catch (e) {
@@ -335,10 +529,11 @@ export async function handleRegisterNewClubUI(event) {
       defaultQtrMins: 12
     });
     clubHubOpenManually = false;
+    clearPendingAuthHints();
     renderAccessGate();
     renderClubSwitcher();
     alert(
-      `🏟️ Created "${res.club.shortName}"!\n\nYour Club Join Code is: ${res.joinCode}\nShare it from 🛡️ Admin → 🏟️ Club to onboard your coaches.`
+      `🏟️ Created "${res.club.shortName}"!\n\nYour Club Registration Code is: ${res.joinCode}\nShare it from 🛡️ Admin → 🏟️ Club to onboard your coaches.`
     );
   } catch (e) {
     if (errEl) {
@@ -353,14 +548,65 @@ export async function handleRegisterNewClubUI(event) {
   }
 }
 
+function buildTeamRequestRowsHtml() {
+  const profile = appState.userProfile;
+  if (!profile || !canRequestTeamAccess(profile)) return '';
+  const allTeams = appState.allClubTeams || [];
+  const assignedSet = new Set(profile.assignedTeamIds || []);
+  const myReqs = (appState.allClubTeamRequests || []).filter(r => r.uid === profile.uid);
+  const reqByTeamId = {};
+  myReqs.forEach(r => {
+    if (!reqByTeamId[r.teamId] || r.status === 'pending') {
+      reqByTeamId[r.teamId] = r;
+    }
+  });
+
+  const requestableTeams = allTeams.filter(t => !assignedSet.has(t.teamId));
+  if (requestableTeams.length === 0) {
+    return `<p class="text-[11px] text-slate-400 italic">No additional club teams available to request right now.</p>`;
+  }
+
+  return requestableTeams
+    .map(t => {
+      const existingReq = reqByTeamId[t.teamId];
+      const isPending = existingReq && existingReq.status === 'pending';
+      const isRejected = existingReq && existingReq.status === 'rejected';
+      return `
+        <div class="flex items-center justify-between gap-2 bg-slate-900/90 px-2.5 py-2 rounded-lg border ${
+          isPending ? 'border-amber-500/50' : 'border-slate-700'
+        }">
+          <div class="min-w-0">
+            <div class="font-bold text-white text-xs truncate">🛡️ ${escapeHtml(t.name)}</div>
+            <div class="text-[10px] text-slate-400">${escapeHtml(t.ageGroup || 'Club')} • ${escapeHtml(t.defaultFormation || '7v7')}${
+        isRejected ? ' • <span class="text-rose-400">Previously declined</span>' : ''
+      }</div>
+          </div>
+          ${
+            isPending
+              ? `<div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">⏳ Pending</span>
+                  <button type="button" onclick="handleCancelTeamRequestUI('${escapeHtml(existingReq.requestId)}')" class="text-[10px] text-slate-400 hover:text-rose-300 font-bold px-1" title="Cancel request">✕</button>
+                </div>`
+              : `<button type="button" onclick="handleRequestTeamAccessUI('${escapeHtml(t.teamId)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0 shadow">Request Access</button>`
+          }
+        </div>
+      `;
+    })
+    .join('');
+}
+
 export function renderAccessGate() {
   renderClubSwitcher();
 
   const gateModal = document.getElementById('accessGateModal');
   const closeBtn = document.getElementById('accessGateCloseBtn');
   const emailBadge = document.getElementById('accessGateEmail');
+  const mismatchBox = document.getElementById('accessGateMismatchBanner');
+  const diagnosticBox = document.getElementById('accessGateDiagnosticBanner');
   const myClubsSection = document.getElementById('accessGateMyClubsSection');
   const myClubsList = document.getElementById('accessGateMyClubsList');
+  const requestTeamSection = document.getElementById('accessGateRequestTeamSection');
+  const requestTeamList = document.getElementById('accessGateRequestTeamList');
   const pendingInvitesBox = document.getElementById('accessGatePendingInvitesBox');
   const formPanel = document.getElementById('accessGateJoinFormPanel');
   const joinTabPanel = document.getElementById('onboardingPanelJoin');
@@ -398,9 +644,36 @@ export function renderAccessGate() {
     if (nameInput && !nameInput.value && appState.currentUser?.displayName) {
       nameInput.value = appState.currentUser.displayName;
     }
-    const urlCode = getJoinCodeFromUrl();
+    const urlCode = getJoinCodeFromUrlOrSession();
     if (codeInput && !codeInput.value && urlCode) {
       codeInput.value = urlCode;
+    }
+
+    // Show Google account mismatch banner if coach opened ?invite= link with wrong Google email
+    if (mismatchBox) {
+      const mm = appState.inviteEmailMismatch;
+      mismatchBox.classList.toggle('hidden', !mm);
+      if (mm) {
+        mismatchBox.innerHTML = `
+          <div class="font-bold text-amber-200">✉️ Pre-Authorized Invite Email Mismatch</div>
+          <p class="text-[11px] text-slate-200 leading-snug">
+            This invite link is pre-authorized for <strong>${escapeHtml(mm.expectedEmail)}</strong>,
+            but you signed in as <strong>${escapeHtml(mm.signedInEmail)}</strong>.
+          </p>
+          <button type="button" onclick="handleSwitchGoogleAccount()" class="w-full bg-white text-slate-900 hover:bg-slate-100 py-1.5 rounded font-bold text-[11px] shadow">
+            🔄 Switch Google Account
+          </button>
+        `;
+      }
+    }
+
+    // Surface real Firestore/Auth errors instead of hiding them
+    if (diagnosticBox) {
+      const diag = appState.authDiagnosticError;
+      diagnosticBox.classList.toggle('hidden', !diag);
+      if (diag) {
+        diagnosticBox.innerText = `⚠️ ${diag}`;
+      }
     }
 
     // Show user's existing clubs when opened manually as Club Hub
@@ -418,18 +691,33 @@ export function renderAccessGate() {
                 isCurrent ? 'border-emerald-500/60' : 'border-slate-700'
               }">
                 <div class="min-w-0">
-                  <div class="font-bold text-white text-xs truncate">🏟️ ${m.clubName || m.clubId}</div>
+                  <div class="font-bold text-white text-xs truncate">🏟️ ${escapeHtml(m.clubName || m.clubId)}</div>
                   <div class="text-[10px] text-slate-400">${meta.icon} ${meta.label}</div>
                 </div>
                 ${
                   isCurrent
                     ? `<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold shrink-0">Active</span>`
-                    : `<button onclick="handleSwitchClubUI('${m.clubId}')" class="bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shrink-0">Switch</button>`
+                    : `<button onclick="handleSwitchClubUI('${escapeHtml(m.clubId)}')" class="bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shrink-0">Switch</button>`
                 }
               </div>
             `;
           })
           .join('');
+      }
+    }
+
+    // Allow active non-admin coaches to request access to additional teams inside Club Hub
+    if (requestTeamSection && requestTeamList) {
+      const showReqTeams =
+        !isBlockedGate &&
+        appState.accessStatus === 'ready' &&
+        canRequestTeamAccess(appState.userProfile) &&
+        (appState.allClubTeams || []).some(
+          t => !(appState.userProfile?.assignedTeamIds || []).includes(t.teamId)
+        );
+      requestTeamSection.classList.toggle('hidden', !showReqTeams);
+      if (showReqTeams) {
+        requestTeamList.innerHTML = buildTeamRequestRowsHtml();
       }
     }
 
@@ -443,10 +731,10 @@ export function renderAccessGate() {
             inv => `
             <div class="flex items-center justify-between gap-2 bg-emerald-950/50 border border-emerald-500/40 rounded-lg p-2 text-xs">
               <div class="min-w-0">
-                <div class="font-bold text-emerald-300 truncate">✉️ Invite: ${inv.clubName || inv.clubId}</div>
+                <div class="font-bold text-emerald-300 truncate">✉️ Invite: ${escapeHtml(inv.clubName || inv.clubId)}</div>
                 <div class="text-[10px] text-slate-300">Role: ${getRoleMeta(inv.role).label}</div>
               </div>
-              <button onclick="handleClaimAdditionalInviteUI('${inv.inviteId}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept</button>
+              <button onclick="handleClaimAdditionalInviteUI('${escapeHtml(inv.inviteId)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept</button>
             </div>`
           )
           .join('');
@@ -493,13 +781,13 @@ export function renderAccessGate() {
     if (myInvites.length > 0) {
       const inv = myInvites[0];
       addInvContent.innerHTML = `
-        <span class="truncate">✉️ You've been invited to <strong>${inv.clubName || inv.clubId}</strong> (${getRoleMeta(inv.role).label})</span>
-        <button onclick="handleClaimAdditionalInviteUI('${inv.inviteId}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept &amp; Join</button>
+        <span class="truncate">✉️ You've been invited to <strong>${escapeHtml(inv.clubName || inv.clubId)}</strong> (${getRoleMeta(inv.role).label})</span>
+        <button onclick="handleClaimAdditionalInviteUI('${escapeHtml(inv.inviteId)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded shrink-0">Accept &amp; Join</button>
       `;
     }
   }
 
-  // Invited welcome banner
+  // Invited / Joined welcome banner
   const inviteBanner = document.getElementById('claimedInviteBanner');
   const inviteText = document.getElementById('claimedInviteText');
   if (inviteBanner && inviteText) {
@@ -516,16 +804,78 @@ export function renderAccessGate() {
     viewerBanner.classList.toggle('hidden', !showViewer);
   }
 
-  // No teams assigned warning (for active coach/lead/viewer with 0 assigned teams)
+  // Age-Group Lead pending team access requests banner (Admins also see them in 🛡️ Admin → Staff)
+  const leadReqBanner = document.getElementById('leadTeamRequestsBanner');
+  const leadReqList = document.getElementById('leadTeamRequestsList');
+  if (leadReqBanner && leadReqList) {
+    const isLead = appState.accessStatus === 'ready' && isAgeGroupLead(appState.userProfile);
+    const approvable = isLead
+      ? getApprovableTeamRequests(appState.userProfile, appState.allClubTeamRequests)
+      : [];
+    leadReqBanner.classList.toggle('hidden', approvable.length === 0);
+    if (approvable.length > 0) {
+      leadReqList.innerHTML = approvable
+        .map(
+          r => `
+          <div class="flex items-center justify-between gap-2 bg-slate-900/90 px-2.5 py-2 rounded border border-sky-500/40">
+            <div class="min-w-0">
+              <div class="font-bold text-white text-xs truncate">${escapeHtml(r.displayName || r.email)} → <span class="text-emerald-300">${escapeHtml(r.teamName || r.teamId)}</span></div>
+              <div class="text-[10px] text-slate-400 truncate">${escapeHtml(r.email || '')} • ${escapeHtml(r.ageGroup || '')}</div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" onclick="handleApproveTeamRequestUI('${escapeHtml(r.requestId)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2 py-1 rounded">✓ Approve</button>
+              <button type="button" onclick="handleRejectTeamRequestUI('${escapeHtml(r.requestId)}')" class="bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[10px] px-2 py-1 rounded">✕</button>
+            </div>
+          </div>`
+        )
+        .join('');
+    }
+  }
+
+  // No teams assigned panel -> Interactive Team Access Request selector for self-registered coaches!
   const noTeamsBanner = document.getElementById('noTeamsAssignedBanner');
   if (noTeamsBanner) {
     const showNoTeams =
       appState.accessStatus === 'ready' &&
       appState.syncState === 'synced' &&
       Boolean(appState.userProfile) &&
-      appState.userProfile.role !== 'admin' &&
+      !isClubAdmin(appState.userProfile) &&
       appState.teams.length === 0;
     noTeamsBanner.classList.toggle('hidden', !showNoTeams);
+    // Keep pitch/match details hidden while coach has 0 assigned teams so unassigned teams' data isn't exposed
+    const matchAcc = document.getElementById('matchDetailsAccordion');
+    const viewPitch = document.getElementById('view-pitch');
+    const viewSplitter = document.getElementById('view-splitter');
+    const viewStats = document.getElementById('view-stats');
+    if (matchAcc) matchAcc.classList.toggle('hidden', showNoTeams);
+    if (showNoTeams) {
+      if (viewPitch) viewPitch.classList.add('hidden');
+      if (viewSplitter) viewSplitter.classList.add('hidden');
+      if (viewStats) viewStats.classList.add('hidden');
+    } else if (
+      viewPitch &&
+      viewPitch.classList.contains('hidden') &&
+      viewSplitter?.classList.contains('hidden') &&
+      viewStats?.classList.contains('hidden') &&
+      document.getElementById('view-admin')?.classList.contains('hidden')
+    ) {
+      viewPitch.classList.remove('hidden');
+    }
+    if (showNoTeams) {
+      const teamRows = buildTeamRequestRowsHtml();
+      noTeamsBanner.innerHTML = `
+        <div class="space-y-2">
+          <div>
+            <div class="font-bold text-amber-200 text-xs">🛡️ Request Access to Your Team(s)</div>
+            <p class="text-[11px] text-slate-300 mt-0.5 leading-snug">
+              Your coach profile is active in <strong>${escapeHtml(appState.club?.shortName || 'your club')}</strong>!
+              Select the team(s) you coach below — once your Club Admin or Age-Group Lead approves, your squad unlocks automatically.
+            </p>
+          </div>
+          <div class="space-y-1.5">${teamRows}</div>
+        </div>
+      `;
+    }
   }
 }
 
@@ -533,7 +883,6 @@ export async function handleSubmitJoinCodeUI(event) {
   if (event) event.preventDefault();
   const codeInput = document.getElementById('accessGateJoinCodeInput');
   const nameInput = document.getElementById('accessGateNameInput');
-  const noteInput = document.getElementById('accessGateNoteInput');
   const errEl = document.getElementById('accessGateError');
   const submitBtn = document.getElementById('accessGateSubmitBtn');
 
@@ -541,7 +890,7 @@ export async function handleSubmitJoinCodeUI(event) {
   const joinCode = normalizeJoinCode(codeInput?.value || '');
   if (!joinCode) {
     if (errEl) {
-      errEl.innerText = 'Please enter a valid Club Join Code (e.g. STRAFFAN-2026).';
+      errEl.innerText = 'Please enter a valid Club Registration Code (e.g. STRAFFAN-2026).';
       errEl.classList.remove('hidden');
     }
     return;
@@ -549,25 +898,67 @@ export async function handleSubmitJoinCodeUI(event) {
 
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerText = 'Checking Join Code...';
+    submitBtn.innerText = 'Creating Coach Profile...';
   }
   try {
-    await submitJoinCodeRequest({
+    await joinClubWithCode({
       joinCode,
-      displayName: nameInput?.value.trim() || '',
-      note: noteInput?.value.trim() || ''
+      displayName: nameInput?.value.trim() || ''
     });
+    clubHubOpenManually = false;
+    clearPendingAuthHints();
     renderAccessGate();
+    renderClubSwitcher();
   } catch (e) {
     if (errEl) {
-      errEl.innerText = e.message || 'Could not submit join request.';
+      errEl.innerText = e.message || 'Could not join club with that registration code.';
       errEl.classList.remove('hidden');
     }
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.innerText = '🔑 Request Club Access';
+      submitBtn.innerText = '🔑 Join Club & Create Coach Profile';
     }
+  }
+}
+
+export async function handleRequestTeamAccessUI(teamId) {
+  if (!teamId) return;
+  try {
+    await requestTeamAccess({ teamId });
+    renderAccessGate();
+  } catch (e) {
+    alert(e.message || 'Could not submit team access request.');
+  }
+}
+
+export async function handleCancelTeamRequestUI(requestId) {
+  if (!requestId) return;
+  try {
+    await cancelTeamAccessRequest(requestId);
+    renderAccessGate();
+  } catch (e) {
+    alert(e.message || 'Could not cancel team request.');
+  }
+}
+
+export async function handleApproveTeamRequestUI(requestId) {
+  if (!requestId) return;
+  try {
+    const req = await approveTeamAccessRequest(requestId);
+    alert(`✅ Approved ${req.displayName || req.email} for ${req.teamName}! Their app will unlock automatically.`);
+  } catch (e) {
+    alert(e.message || 'Could not approve team request.');
+  }
+}
+
+export async function handleRejectTeamRequestUI(requestId) {
+  if (!requestId) return;
+  if (!confirm('Decline this team access request?')) return;
+  try {
+    await rejectTeamAccessRequest(requestId);
+  } catch (e) {
+    alert(e.message || 'Could not decline team request.');
   }
 }
 
@@ -587,12 +978,17 @@ export async function handleRecheckAccessUI() {
   if (!appState.currentUser) return;
   const errEl = document.getElementById('accessGateError');
   if (errEl) errEl.classList.add('hidden');
+  const { inviteId, email: expectedInviteEmail } = getPendingInviteHint();
   try {
-    const res = await ensureUserAndClubSeeded(appState.currentUser);
+    const res = await ensureUserAndClubSeeded(appState.currentUser, {
+      inviteIdHint: inviteId,
+      expectedInviteEmail
+    });
     if (res?.accessStatus === 'ready') {
+      clearPendingAuthHints();
       startFirestoreSubscriptions(appState.currentUser);
-    } else if (errEl && res?.accessStatus === 'needs_onboarding') {
-      errEl.innerText = 'No pending email invite found yet for your email. Enter a Club Join Code below or ask your Club Admin to invite your email.';
+    } else if (errEl && res?.accessStatus === 'needs_onboarding' && !appState.authDiagnosticError && !appState.inviteEmailMismatch) {
+      errEl.innerText = `No pending email invite found yet for ${appState.currentUser.email || 'your email'}. Enter your Club Registration Code above to create your coach profile immediately, or ask your Club Admin to invite your email.`;
       errEl.classList.remove('hidden');
     }
     renderAccessGate();

@@ -85,34 +85,128 @@ service cloud.firestore {
       return !(key in obj) || obj[key] == true;
     }
 
-    function isValidInviteClaim(newUser) {
-      let inv = get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data;
-      return newUser.claimedInviteId is string
-        && exists(/databases/$(database)/documents/invites/$(newUser.claimedInviteId))
-        && inv.status == 'pending'
+    function safeList(obj, key) {
+      return (key in obj && obj[key] is list) ? obj[key] : [];
+    }
+
+    function safeJoinCodeRole(codeDoc) {
+      return ('defaultRole' in codeDoc && codeDoc.defaultRole in ['coach', 'viewer'])
+        ? codeDoc.defaultRole
+        : 'coach';
+    }
+
+    // Pre-authorized email invite claim (first-time profile creation)
+    function isValidInviteClaimDoc(newUser, inv) {
+      return inv.status == 'pending'
         && authEmailLower() != ''
-        && inv.email == authEmailLower()
+        && 'email' in inv
+        && inv.email is string
+        && inv.email.lower() == authEmailLower()
         && newUser.clubId == inv.clubId
         && newUser.role == inv.role
         && newUser.status == 'active'
-        && newUser.assignedTeamIds == inv.assignedTeamIds
-        && newUser.assignedAgeGroups == inv.assignedAgeGroups
+        && newUser.assignedTeamIds == safeList(inv, 'assignedTeamIds')
+        && newUser.assignedAgeGroups == safeList(inv, 'assignedAgeGroups')
         && boolFlagDefaultTrue(newUser, 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
         && boolFlagDefaultTrue(newUser, 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'));
+    }
+
+    function isValidInviteClaim(newUser) {
+      return 'claimedInviteId' in newUser
+        && newUser.claimedInviteId is string
+        && exists(/databases/$(database)/documents/invites/$(newUser.claimedInviteId))
+        && isValidInviteClaimDoc(newUser, get(/databases/$(database)/documents/invites/$(newUser.claimedInviteId)).data);
+    }
+
+    // Self-registration via active Club Registration Code (instant coach profile, 0 assigned teams until Lead/Admin approves team request)
+    function isValidJoinCodeRegistrationDoc(newUser, codeDoc) {
+      let allowedRole = safeJoinCodeRole(codeDoc);
+      return codeDoc.active == true
+        && newUser.clubId == codeDoc.clubId
+        && newUser.role == allowedRole
+        && newUser.status == 'active'
+        && newUser.assignedTeamIds is list
+        && newUser.assignedTeamIds.size() == 0
+        && newUser.assignedAgeGroups is list
+        && newUser.assignedAgeGroups.size() == 0
+        && boolFlagDefaultTrue(newUser, 'canViewSplitter') == true
+        && boolFlagDefaultTrue(newUser, 'canViewStats') == true
+        && newUser.memberClubIds is list
+        && newUser.memberClubIds == [codeDoc.clubId]
+        && 'clubMemberships' in newUser
+        && newUser.clubMemberships.keys().hasOnly([codeDoc.clubId])
+        && newUser.clubMemberships[codeDoc.clubId].clubId == codeDoc.clubId
+        && newUser.clubMemberships[codeDoc.clubId].role == allowedRole
+        && newUser.clubMemberships[codeDoc.clubId].status == 'active'
+        && newUser.clubMemberships[codeDoc.clubId].assignedTeamIds is list
+        && newUser.clubMemberships[codeDoc.clubId].assignedTeamIds.size() == 0
+        && newUser.clubMemberships[codeDoc.clubId].assignedAgeGroups is list
+        && newUser.clubMemberships[codeDoc.clubId].assignedAgeGroups.size() == 0;
+    }
+
+    function isValidJoinCodeRegistration(newUser) {
+      return 'joinedViaCode' in newUser
+        && newUser.joinedViaCode is string
+        && exists(/databases/$(database)/documents/joinCodes/$(newUser.joinedViaCode))
+        && isValidJoinCodeRegistrationDoc(newUser, get(/databases/$(database)/documents/joinCodes/$(newUser.joinedViaCode)).data);
+    }
+
+    // Multi-club: existing user joining an additional club via active Club Registration Code
+    function isValidAdditionalJoinCodeRegistrationDoc(userId, codeDoc) {
+      let nextClub = codeDoc.clubId;
+      let allowedRole = safeJoinCodeRole(codeDoc);
+      return request.auth.uid == userId
+        && codeDoc.active == true
+        && request.resource.data.clubId == nextClub
+        && request.resource.data.role == allowedRole
+        && request.resource.data.status == 'active'
+        && request.resource.data.assignedTeamIds is list
+        && request.resource.data.assignedTeamIds.size() == 0
+        && request.resource.data.assignedAgeGroups is list
+        && request.resource.data.assignedAgeGroups.size() == 0
+        && 'clubMemberships' in request.resource.data
+        && nextClub in request.resource.data.clubMemberships
+        && request.resource.data.clubMemberships[nextClub].clubId == nextClub
+        && request.resource.data.clubMemberships[nextClub].role == allowedRole
+        && request.resource.data.clubMemberships[nextClub].status == 'active'
+        && request.resource.data.clubMemberships[nextClub].assignedTeamIds is list
+        && request.resource.data.clubMemberships[nextClub].assignedTeamIds.size() == 0
+        && (
+          (
+            'clubMemberships' in resource.data
+            && request.resource.data.clubMemberships.diff(resource.data.clubMemberships).affectedKeys().hasOnly([nextClub])
+          ) || (
+            !('clubMemberships' in resource.data)
+            && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, nextClub])
+            && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
+            && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
+            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == safeList(resource.data, 'assignedTeamIds')
+          )
+        );
+    }
+
+    function isValidAdditionalJoinCodeRegistration(userId) {
+      return 'joinedViaCode' in request.resource.data
+        && request.resource.data.joinedViaCode is string
+        && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinedViaCode))
+        && isValidAdditionalJoinCodeRegistrationDoc(userId, get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinedViaCode)).data);
     }
 
     // Multi-club: switching active club using an already-authorized membership entry
     function isValidClubSwitch(userId) {
       let nextClub = request.resource.data.clubId;
-      let target = resource.data.clubMemberships[nextClub];
       return request.auth.uid == userId
         && 'clubMemberships' in resource.data
         && nextClub in resource.data.clubMemberships
-        && request.resource.data.clubMemberships == resource.data.clubMemberships
+        && isValidClubSwitchTarget(resource.data.clubMemberships[nextClub]);
+    }
+
+    function isValidClubSwitchTarget(target) {
+      return request.resource.data.clubMemberships == resource.data.clubMemberships
         && request.resource.data.role == target.role
         && request.resource.data.status == target.status
-        && request.resource.data.assignedTeamIds == target.assignedTeamIds
-        && request.resource.data.assignedAgeGroups == target.assignedAgeGroups
+        && request.resource.data.assignedTeamIds == safeList(target, 'assignedTeamIds')
+        && request.resource.data.assignedAgeGroups == safeList(target, 'assignedAgeGroups')
         && boolFlagDefaultTrue(request.resource.data, 'canViewSplitter') == boolFlagDefaultTrue(target, 'canViewSplitter')
         && boolFlagDefaultTrue(request.resource.data, 'canViewStats') == boolFlagDefaultTrue(target, 'canViewStats')
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -142,27 +236,25 @@ service cloud.firestore {
             && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, nextClub])
             && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
             && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
-            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == resource.data.assignedTeamIds
+            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == safeList(resource.data, 'assignedTeamIds')
           )
         );
     }
 
     // Multi-club: existing user claiming a pending invite to an additional club
-    function isValidAdditionalInviteClaim(userId) {
-      let invId = request.resource.data.claimedInviteId;
-      let inv = get(/databases/$(database)/documents/invites/$(invId)).data;
+    function isValidAdditionalInviteClaimDoc(userId, inv) {
       let nextClub = inv.clubId;
       return request.auth.uid == userId
-        && invId is string
-        && exists(/databases/$(database)/documents/invites/$(invId))
         && inv.status == 'pending'
         && authEmailLower() != ''
-        && inv.email == authEmailLower()
+        && 'email' in inv
+        && inv.email is string
+        && inv.email.lower() == authEmailLower()
         && request.resource.data.clubId == nextClub
         && request.resource.data.role == inv.role
         && request.resource.data.status == 'active'
-        && request.resource.data.assignedTeamIds == inv.assignedTeamIds
-        && request.resource.data.assignedAgeGroups == inv.assignedAgeGroups
+        && request.resource.data.assignedTeamIds == safeList(inv, 'assignedTeamIds')
+        && request.resource.data.assignedAgeGroups == safeList(inv, 'assignedAgeGroups')
         && boolFlagDefaultTrue(request.resource.data, 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
         && boolFlagDefaultTrue(request.resource.data, 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'))
         && 'clubMemberships' in request.resource.data
@@ -170,8 +262,8 @@ service cloud.firestore {
         && request.resource.data.clubMemberships[nextClub].clubId == nextClub
         && request.resource.data.clubMemberships[nextClub].role == inv.role
         && request.resource.data.clubMemberships[nextClub].status == 'active'
-        && request.resource.data.clubMemberships[nextClub].assignedTeamIds == inv.assignedTeamIds
-        && request.resource.data.clubMemberships[nextClub].assignedAgeGroups == inv.assignedAgeGroups
+        && request.resource.data.clubMemberships[nextClub].assignedTeamIds == safeList(inv, 'assignedTeamIds')
+        && request.resource.data.clubMemberships[nextClub].assignedAgeGroups == safeList(inv, 'assignedAgeGroups')
         && boolFlagDefaultTrue(request.resource.data.clubMemberships[nextClub], 'canViewSplitter') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewSplitter'))
         && boolFlagDefaultTrue(request.resource.data.clubMemberships[nextClub], 'canViewStats') == (inv.role == 'admin' || boolFlagDefaultTrue(inv, 'canViewStats'))
         && (
@@ -183,9 +275,16 @@ service cloud.firestore {
             && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId, nextClub])
             && request.resource.data.clubMemberships[resource.data.clubId].clubId == resource.data.clubId
             && request.resource.data.clubMemberships[resource.data.clubId].role == resource.data.role
-            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == resource.data.assignedTeamIds
+            && request.resource.data.clubMemberships[resource.data.clubId].assignedTeamIds == safeList(resource.data, 'assignedTeamIds')
           )
         );
+    }
+
+    function isValidAdditionalInviteClaim(userId) {
+      return 'claimedInviteId' in request.resource.data
+        && request.resource.data.claimedInviteId is string
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.claimedInviteId))
+        && isValidAdditionalInviteClaimDoc(userId, get(/databases/$(database)/documents/invites/$(request.resource.data.claimedInviteId)).data);
     }
 
     // Multi-club: Admin of clubA updating a multi-club member's clubA membership (or approving joinRequest)
@@ -215,6 +314,50 @@ service cloud.firestore {
         );
     }
 
+    // Age-Group Lead approving a pending team access request for a team in their assigned age group
+    function isLeadApprovingTeamRequestDoc(userId, reqDoc) {
+      let clubId = reqDoc.clubId;
+      let prevTeams = safeList(resource.data, 'assignedTeamIds');
+      let nextTeams = safeList(request.resource.data, 'assignedTeamIds');
+      let isActiveInClub = resource.data.clubId == clubId;
+      return reqDoc.status == 'pending'
+        && reqDoc.uid == userId
+        && isClubLeadForAgeGroup(clubId, reqDoc.ageGroup)
+        && resource.data.role != 'admin'
+        && request.resource.data.clubId == resource.data.clubId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.status == resource.data.status
+        && safeList(request.resource.data, 'assignedAgeGroups') == safeList(resource.data, 'assignedAgeGroups')
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['assignedTeamIds', 'clubMemberships', 'memberClubIds', 'approvedTeamRequestId', 'updatedAt'])
+        && (
+          !isActiveInClub || (
+            reqDoc.teamId in nextTeams
+            && nextTeams.hasAll(prevTeams)
+            && nextTeams.size() <= prevTeams.size() + 1
+          )
+        )
+        && 'clubMemberships' in request.resource.data
+        && clubId in request.resource.data.clubMemberships
+        && reqDoc.teamId in safeList(request.resource.data.clubMemberships[clubId], 'assignedTeamIds')
+        && (
+          (
+            'clubMemberships' in resource.data
+            && request.resource.data.clubMemberships.diff(resource.data.clubMemberships).affectedKeys().hasOnly([clubId])
+          ) || (
+            !('clubMemberships' in resource.data)
+            && request.resource.data.clubMemberships.keys().hasOnly([resource.data.clubId])
+          )
+        );
+    }
+
+    function isLeadApprovingTeamRequest(userId) {
+      return 'approvedTeamRequestId' in request.resource.data
+        && request.resource.data.approvedTeamRequestId is string
+        && exists(/databases/$(database)/documents/teamRequests/$(request.resource.data.approvedTeamRequestId))
+        && isLeadApprovingTeamRequestDoc(userId, get(/databases/$(database)/documents/teamRequests/$(request.resource.data.approvedTeamRequestId)).data);
+    }
+
     // --- USERS (COACHES, AGE-GROUP LEADS, VIEWERS & CLUB ADMINS) ---
     match /users/{userId} {
       allow read: if isSignedIn() && (
@@ -227,11 +370,13 @@ service cloud.firestore {
         && request.resource.data.uid == userId
         && isValidRole(request.resource.data.role)
         && (
-          // 1. Club Admin creating a member (e.g., approving a join request)
+          // 1. Club Admin creating a member
           isClubAdmin(request.resource.data.clubId)
-          // 2. Invited user claiming their exact pre-authorized invite
+          // 2. Pre-authorized invited user claiming their exact invite (zero registration code needed)
           || (request.auth.uid == userId && isValidInviteClaim(request.resource.data))
-          // 3. Founding Admin bootstrapping a brand-new club that does not exist yet
+          // 3. New coach self-registering with a valid active Club Registration Code (starts with 0 teams)
+          || (request.auth.uid == userId && isValidJoinCodeRegistration(request.resource.data))
+          // 4. Founding Admin bootstrapping a brand-new club that does not exist yet
           || (
             request.auth.uid == userId
             && request.resource.data.role == 'admin'
@@ -250,13 +395,17 @@ service cloud.firestore {
         )
         // 2. Club Admin updating/approving a multi-club member's entry for their club
         || isAdminUpdatingClubMembership(userId)
-        // 3. Multi-club user switching between their already-authorized clubs
+        // 3. Age-Group Lead approving a coach's pending team access request in their age group
+        || isLeadApprovingTeamRequest(userId)
+        // 4. Multi-club user switching between their already-authorized clubs
         || isValidClubSwitch(userId)
-        // 4. Existing user registering a brand-new isolated club
+        // 5. Existing user registering a brand-new isolated club
         || isValidNewClubAddition(userId)
-        // 5. Existing user claiming an invite to an additional club
+        // 6. Existing user claiming an invite to an additional club
         || isValidAdditionalInviteClaim(userId)
-        // 6. Non-admin self-updates restricted strictly to safe profile fields
+        // 7. Existing user joining an additional club via active Club Registration Code
+        || isValidAdditionalJoinCodeRegistration(userId)
+        // 8. Non-admin self-updates restricted strictly to safe profile fields
         || (
           request.auth.uid == userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastSeenAt'])
@@ -268,9 +417,14 @@ service cloud.firestore {
 
     // --- EMAIL INVITES (PRE-AUTHORIZED COACHES) ---
     match /invites/{inviteId} {
-      allow read: if isSignedIn() && (
-        isClubAdmin(resource.data.clubId) ||
-        (authEmailLower() != '' && resource.data.email == authEmailLower())
+      allow get: if isSignedIn() && (
+        (authEmailLower() != '' && resource.data.email is string && resource.data.email.lower() == authEmailLower()) ||
+        isClubAdmin(resource.data.clubId)
+      );
+
+      allow list: if isSignedIn() && (
+        (authEmailLower() != '' && resource.data.email == authEmailLower()) ||
+        isClubAdmin(resource.data.clubId)
       );
 
       allow create: if isClubAdmin(request.resource.data.clubId)
@@ -283,7 +437,8 @@ service cloud.firestore {
       ) || (
         isSignedIn()
         && authEmailLower() != ''
-        && resource.data.email == authEmailLower()
+        && resource.data.email is string
+        && resource.data.email.lower() == authEmailLower()
         && resource.data.status == 'pending'
         && request.resource.data.status == 'accepted'
         && request.resource.data.claimedBy == request.auth.uid
@@ -301,7 +456,33 @@ service cloud.firestore {
       allow update, delete: if isClubAdmin(resource.data.clubId);
     }
 
-    // --- CLUB JOIN REQUESTS (APPROVAL QUEUE) ---
+    // --- TEAM ACCESS REQUESTS (COACH REQUESTS SPECIFIC TEAM; ADMIN OR AGE-GROUP LEAD APPROVES) ---
+    match /teamRequests/{requestId} {
+      allow read: if isClubMember(resource.data.clubId) && (
+        resource.data.uid == request.auth.uid ||
+        userRole() == 'admin' ||
+        userRole() == 'lead'
+      );
+
+      allow create: if isClubMember(request.resource.data.clubId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.teamId is string
+        && exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId))
+        && get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.clubId == request.resource.data.clubId
+        && request.resource.data.ageGroup == get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.ageGroup;
+
+      allow update: if (
+        isClubAdmin(resource.data.clubId) ||
+        isClubLeadForAgeGroup(resource.data.clubId, resource.data.ageGroup)
+      ) && request.resource.data.clubId == resource.data.clubId;
+
+      allow delete: if isClubAdmin(resource.data.clubId)
+        || isClubLeadForAgeGroup(resource.data.clubId, resource.data.ageGroup)
+        || (isSignedIn() && resource.data.uid == request.auth.uid && resource.data.status == 'pending');
+    }
+
+    // --- LEGACY CLUB JOIN REQUESTS (BACKWARD COMPATIBLE APPROVAL QUEUE) ---
     match /joinRequests/{requestId} {
       allow read: if isSignedIn() && (
         resource.data.uid == request.auth.uid ||

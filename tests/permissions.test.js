@@ -15,6 +15,9 @@ import {
   canEditTeam,
   canDeletePlayer,
   canCreateTeamInAgeGroup,
+  canRequestTeamAccess,
+  canApproveTeamRequest,
+  getApprovableTeamRequests,
   canPublishSquadSplit,
   countActiveAdmins,
   canModifyUserRole,
@@ -222,5 +225,67 @@ describe('4-Role RBAC & Access Control (src/permissions.js)', () => {
     assert.equal(canViewStatsTab(SUSPENDED_COACH), false);
     assert.equal(canViewSplitterTab(null), false);
     assert.equal(canViewStatsTab(null), false);
+  });
+
+  it('allows coaches to request teams and lets Admins & matching Age-Group Leads approve team requests', () => {
+    const reqU10 = {
+      requestId: 'straffan_afc__c1__u10_green',
+      clubId: 'straffan_afc',
+      teamId: 'u10_green',
+      ageGroup: 'U10',
+      uid: 'c1',
+      status: 'pending'
+    };
+    const reqU12 = {
+      requestId: 'straffan_afc__c1__u12_blue',
+      clubId: 'straffan_afc',
+      teamId: 'u12_blue',
+      ageGroup: 'U12',
+      uid: 'c1',
+      status: 'pending'
+    };
+    const reqOtherClub = {
+      requestId: 'other_club__c1__u10_a',
+      clubId: 'other_club',
+      teamId: 'u10_a',
+      ageGroup: 'U10',
+      uid: 'c1',
+      status: 'pending'
+    };
+    const reqApproved = { ...reqU10, requestId: 'approved_1', status: 'approved' };
+
+    // Active non-admins can request team access; admins already have all teams; suspended blocked
+    assert.equal(canRequestTeamAccess(COACH_WHITE), true);
+    assert.equal(canRequestTeamAccess(VIEWER_WHITE), true);
+    assert.equal(canRequestTeamAccess(LEAD_U10), true);
+    assert.equal(canRequestTeamAccess(ADMIN), false);
+    assert.equal(canRequestTeamAccess(SUSPENDED_COACH), false);
+
+    // Admins approve any team in their club (never another club)
+    assert.equal(canApproveTeamRequest(ADMIN, reqU10), true);
+    assert.equal(canApproveTeamRequest(ADMIN, reqU12), true);
+    assert.equal(canApproveTeamRequest(ADMIN, reqOtherClub), false);
+
+    // Age-Group Leads approve ONLY teams in their assigned age groups
+    assert.equal(canApproveTeamRequest(LEAD_U10, reqU10), true);
+    assert.equal(canApproveTeamRequest(LEAD_U10, reqU12), false);
+    assert.equal(canApproveTeamRequest(LEAD_U10, reqOtherClub), false);
+
+    // Regular coaches, viewers, and suspended users cannot approve team requests
+    assert.equal(canApproveTeamRequest(COACH_WHITE, reqU10), false);
+    assert.equal(canApproveTeamRequest(VIEWER_WHITE, reqU10), false);
+    assert.equal(canApproveTeamRequest(SUSPENDED_COACH, reqU10), false);
+
+    // Filtering pending approvable requests
+    const allReqs = [reqU10, reqU12, reqOtherClub, reqApproved];
+    assert.deepEqual(
+      getApprovableTeamRequests(ADMIN, allReqs).map(r => r.requestId),
+      ['straffan_afc__c1__u10_green', 'straffan_afc__c1__u12_blue']
+    );
+    assert.deepEqual(
+      getApprovableTeamRequests(LEAD_U10, allReqs).map(r => r.requestId),
+      ['straffan_afc__c1__u10_green']
+    );
+    assert.deepEqual(getApprovableTeamRequests(COACH_WHITE, allReqs), []);
   });
 });

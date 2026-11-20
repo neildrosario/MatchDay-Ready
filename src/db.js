@@ -23,6 +23,7 @@ import {
   isProfileActive,
   canModifyUserRole,
   canRemoveUser,
+  canApproveTeamRequest,
   normalizeRole
 } from './permissions.js';
 import {
@@ -170,6 +171,7 @@ function createInitialSeedData(adminUid = 'local_coach_1', adminEmail = 'neil@st
       }
     },
     joinRequests: {},
+    teamRequests: {},
     players: playersMap,
     matches: {},
     lineups: {}
@@ -182,7 +184,9 @@ export const appState = {
   syncState: 'local', // 'synced' | 'syncing' | 'local' | 'error'
   accessStatus: 'ready', // 'ready' | 'loading' | 'needs_onboarding' | 'pending_approval' | 'rejected' | 'suspended'
   pendingJoinRequest: null, // Active/rejected joinRequest for unattached user
-  claimedInviteNotice: null, // Banner notice shown after auto-claiming an email invite
+  claimedInviteNotice: null, // Banner notice shown after auto-claiming an email invite or joining via code
+  authDiagnosticError: null, // Surfaces real Firestore/auth errors instead of silently dumping to join code gate
+  inviteEmailMismatch: null, // { expectedEmail, signedInEmail, inviteId } when SSO account doesn't match invite link
   myPendingInvites: [], // Pending email invites addressed to the signed-in user across clubs (Milestone 15)
   currentUser: null, // Firebase auth user or local user profile
   userProfile: null, // Document from `users` collection
@@ -191,7 +195,8 @@ export const appState = {
   allClubTeams: [], // All teams in club (for shared player badges & admin)
   allClubUsers: [], // All coaches/leads/viewers/admins in club
   allClubInvites: [], // Pending/accepted email invites for club (Admin only)
-  allClubJoinRequests: [], // Pending/reviewed join-code requests (Admin only)
+  allClubJoinRequests: [], // Legacy pending/reviewed join-code requests (Admin only)
+  allClubTeamRequests: [], // Team access requests (Coach own requests, Lead age-group requests, Admin all requests)
   selectedTeamId: localStorage.getItem('matchday_selected_team_v3') || 'u10_white',
   selectedDate: new Date().toISOString().split('T')[0],
   currentQuarter: 1,
@@ -371,6 +376,9 @@ export function hydrateAppStateFromLocalStore(storeInput) {
   appState.allClubJoinRequests = Object.values(store.joinRequests || {}).filter(
     r => (r.clubId || DEFAULT_CLUB_ID) === activeClubId
   );
+  appState.allClubTeamRequests = Object.values(store.teamRequests || {}).filter(
+    r => (r.clubId || DEFAULT_CLUB_ID) === activeClubId
+  );
   appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
 
   if (appState.teams.length > 0 && !appState.teams.some(t => t.teamId === appState.selectedTeamId)) {
@@ -459,6 +467,7 @@ function resetClubRuntimeData() {
   appState.allClubUsers = [];
   appState.allClubInvites = [];
   appState.allClubJoinRequests = [];
+  appState.allClubTeamRequests = [];
   appState.players = [];
   appState.allMatches = {};
   appState.matchesByTeam = {};
@@ -467,8 +476,8 @@ function resetClubRuntimeData() {
 }
 
 /**
- * Watches `users/{uid}` and `joinRequests` while an uninvited user is on the Access Gate,
- * so the moment a Club Admin approves them (or sends an invite), the app unlocks live!
+ * Watches `users/{uid}`, `invites` (by email), and legacy `joinRequests` while an unattached user
+ * is on the Access Gate, so the moment an Admin invites or approves them, the app unlocks live!
  */
 function startAccessGateWatcher(firebaseUser) {
   clearAccessGateSubscriptions();
@@ -484,6 +493,8 @@ function startAccessGateWatcher(firebaseUser) {
           clearAccessGateSubscriptions();
           appState.accessStatus = 'ready';
           appState.pendingJoinRequest = null;
+          appState.authDiagnosticError = null;
+          appState.inviteEmailMismatch = null;
           startFirestoreSubscriptions(firebaseUser);
         } else {
           appState.accessStatus = 'suspended';
@@ -492,6 +503,41 @@ function startAccessGateWatcher(firebaseUser) {
       }
     })
   );
+
+  // Live watcher for late email invites -> auto-claims immediately when Admin sends an invite!
+  const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+  if (cleanEmail) {
+    let claimingFromWatcher = false;
+    accessGateUnsubscribes.push(
+      onSnapshot(
+        query(collection(db, 'invites'), where('email', '==', cleanEmail)),
+        async snap => {
+          if (claimingFromWatcher || appState.accessStatus === 'ready') return;
+          const pending = snap.docs
+            .map(d => ({ inviteId: d.id, ...d.data() }))
+            .find(inv => inv.status === 'pending');
+          if (pending) {
+            claimingFromWatcher = true;
+            try {
+              const res = await ensureUserAndClubSeeded(firebaseUser, {
+                inviteIdHint: pending.inviteId
+              });
+              if (res?.accessStatus === 'ready') {
+                startFirestoreSubscriptions(firebaseUser);
+              }
+            } catch (err) {
+              console.warn('Live invite auto-claim error:', err);
+            } finally {
+              claimingFromWatcher = false;
+            }
+          }
+        },
+        err => {
+          console.warn('Invite watcher error:', err);
+        }
+      )
+    );
+  }
 
   accessGateUnsubscribes.push(
     onSnapshot(
@@ -525,22 +571,100 @@ function startAccessGateWatcher(firebaseUser) {
 
 /**
  * Resolves a signed-in user's club membership:
- * 1. Existing `users/{uid}` profile -> Active or Suspended
- * 2. Pending email match in `invites` -> Auto-claim with exact Admin-assigned role & teams
- * 3. Brand-new empty Firestore (no default club yet) -> Bootstrap founding Admin
- * 4. Otherwise -> Route to Access Gate (Enter Join Code / Wait for Admin Approval) — NEVER auto-admin!
+ * 1. Existing `users/{uid}` profile -> Active or Suspended (auto-claims additional club if `?invite=` matches another club)
+ * 2. Pre-authorized email invite (direct `?invite=` getDoc OR email query) -> Auto-claim immediately (ZERO join code popup!)
+ * 3. Club Registration Code provided via signup form or `?code=` URL -> Instant active coach profile (0 teams; coach requests team access)
+ * 4. Brand-new empty Firestore (no default club yet) -> Bootstrap founding Admin
+ * 5. Otherwise -> Show Access Gate (Join Club with Registration Code or Register New Club) with full diagnostic clarity
  */
-export async function ensureUserAndClubSeeded(firebaseUser) {
+export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
   const { db, configured } = getFirebaseServices();
   if (!configured || !db || !firebaseUser) return { accessStatus: 'needs_onboarding' };
+
+  const inviteIdHint = (options.inviteIdHint || '').trim();
+  const expectedInviteEmail = (options.expectedInviteEmail || '').trim().toLowerCase();
+  const joinCodeHint = normalizeJoinCode(options.joinCodeHint || '');
+  const displayNameHint = (options.displayNameHint || '').trim();
 
   appState.mode = 'firebase';
   appState.syncState = 'syncing';
   appState.accessStatus = 'loading';
   appState.claimedInviteNotice = null;
+  appState.authDiagnosticError = null;
+  appState.inviteEmailMismatch = null;
   notifyAppState();
 
   const userRef = doc(db, 'users', firebaseUser.uid);
+  const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+  const resolvedName =
+    displayNameHint ||
+    firebaseUser.displayName ||
+    (cleanEmail ? cleanEmail.split('@')[0] : 'Coach');
+
+  // Helper to claim a pending invite for a first-time user (strictly surfaces errors!)
+  const claimPendingInviteForNewUser = async inv => {
+    const claimedRole = normalizeRole(inv.role || 'coach');
+    const claimedTeams = Array.isArray(inv.assignedTeamIds) ? [...inv.assignedTeamIds] : [];
+    const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? [...inv.assignedAgeGroups] : [];
+    const claimedSplitter = claimedRole === 'admin' ? true : inv.canViewSplitter !== false;
+    const claimedStats = claimedRole === 'admin' ? true : inv.canViewStats !== false;
+    const newProfile = {
+      uid: firebaseUser.uid,
+      email: cleanEmail,
+      displayName: displayNameHint || firebaseUser.displayName || inv.displayName || resolvedName,
+      role: claimedRole,
+      status: 'active',
+      clubId: inv.clubId,
+      assignedTeamIds: claimedTeams,
+      assignedAgeGroups: claimedGroups,
+      canViewSplitter: claimedSplitter,
+      canViewStats: claimedStats,
+      memberClubIds: [inv.clubId],
+      clubMemberships: {
+        [inv.clubId]: {
+          clubId: inv.clubId,
+          clubName: inv.clubName || inv.clubId,
+          role: claimedRole,
+          status: 'active',
+          assignedTeamIds: claimedTeams,
+          assignedAgeGroups: claimedGroups,
+          canViewSplitter: claimedSplitter,
+          canViewStats: claimedStats
+        }
+      },
+      claimedInviteId: inv.inviteId,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(userRef, newProfile);
+    } catch (writeErr) {
+      console.error('Failed to activate pre-authorized invite profile:', writeErr);
+      appState.authDiagnosticError =
+        `Your pre-authorized invite for ${inv.clubName || inv.clubId} was found, but Firestore blocked activating your profile (${writeErr.code || writeErr.message}). Please ask your Club Admin to deploy the latest Firestore security rules.`;
+      return null;
+    }
+
+    try {
+      await updateDoc(doc(db, 'invites', inv.inviteId), {
+        status: 'accepted',
+        claimedBy: firebaseUser.uid,
+        claimedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('Could not mark invite as accepted:', err);
+    }
+
+    clearAccessGateSubscriptions();
+    appState.userProfile = newProfile;
+    appState.accessStatus = 'ready';
+    appState.pendingJoinRequest = null;
+    appState.authDiagnosticError = null;
+    appState.inviteEmailMismatch = null;
+    appState.claimedInviteNotice = `Welcome to ${inv.clubName || 'your club'}! Your pre-authorized ${newProfile.role.toUpperCase()} access is active.`;
+    notifyAppState();
+    return { accessStatus: 'ready', userProfile: newProfile, claimedInvite: inv };
+  };
 
   // 1. Check existing user profile first
   const userSnap = await getDoc(userRef);
@@ -555,80 +679,106 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
       startAccessGateWatcher(firebaseUser);
       return { accessStatus: 'suspended', userProfile: profile };
     }
+
+    // If user clicked an invite link for ANOTHER club while already having a profile, auto-claim it!
+    if (inviteIdHint && cleanEmail) {
+      try {
+        const directSnap = await getDoc(doc(db, 'invites', inviteIdHint));
+        if (directSnap.exists()) {
+          const inv = { inviteId: directSnap.id, ...directSnap.data() };
+          if (
+            inv.status === 'pending' &&
+            (inv.email || '').trim().toLowerCase() === cleanEmail &&
+            inv.clubId &&
+            inv.clubId !== profile.clubId &&
+            !(profile.clubMemberships && profile.clubMemberships[inv.clubId])
+          ) {
+            appState.myPendingInvites = [inv];
+            await claimAdditionalInvite(inv.inviteId);
+            return { accessStatus: 'ready', userProfile: appState.userProfile, claimedInvite: inv };
+          }
+        }
+      } catch (err) {
+        console.warn('Direct additional invite check note:', err);
+      }
+    }
+
     appState.accessStatus = 'ready';
     notifyAppState();
     return { accessStatus: 'ready', userProfile: profile };
   }
 
-  // 2. Check dedicated `invites` collection for a pending email invite
-  const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+  // 2. Check pre-authorized email invite (Direct ?invite= lookup first, then email query)
   if (cleanEmail) {
-    try {
-      const inviteSnap = await getDocs(
-        query(collection(db, 'invites'), where('email', '==', cleanEmail))
-      );
-      const pendingInvites = inviteSnap.docs
-        .map(d => ({ inviteId: d.id, ...d.data() }))
-        .filter(inv => inv.status === 'pending');
-
-      if (pendingInvites.length > 0) {
-        const inv = pendingInvites[0];
-        const claimedRole = normalizeRole(inv.role || 'coach');
-        const claimedTeams = Array.isArray(inv.assignedTeamIds) ? inv.assignedTeamIds : [];
-        const claimedGroups = Array.isArray(inv.assignedAgeGroups) ? inv.assignedAgeGroups : [];
-        const claimedSplitter = claimedRole === 'admin' ? true : inv.canViewSplitter !== false;
-        const claimedStats = claimedRole === 'admin' ? true : inv.canViewStats !== false;
-        const newProfile = {
-          uid: firebaseUser.uid,
-          email: cleanEmail,
-          displayName: firebaseUser.displayName || inv.displayName || cleanEmail.split('@')[0],
-          role: claimedRole,
-          status: 'active',
-          clubId: inv.clubId,
-          assignedTeamIds: claimedTeams,
-          assignedAgeGroups: claimedGroups,
-          canViewSplitter: claimedSplitter,
-          canViewStats: claimedStats,
-          memberClubIds: [inv.clubId],
-          clubMemberships: {
-            [inv.clubId]: {
-              clubId: inv.clubId,
-              clubName: inv.clubName || inv.clubId,
-              role: claimedRole,
-              status: 'active',
-              assignedTeamIds: claimedTeams,
-              assignedAgeGroups: claimedGroups,
-              canViewSplitter: claimedSplitter,
-              canViewStats: claimedStats
-            }
-          },
-          claimedInviteId: inv.inviteId,
-          createdAt: new Date().toISOString()
-        };
-
-        await setDoc(userRef, newProfile);
-        try {
-          await updateDoc(doc(db, 'invites', inv.inviteId), {
-            status: 'accepted',
-            claimedBy: firebaseUser.uid,
-            claimedAt: new Date().toISOString()
-          });
-        } catch (err) {
-          console.warn('Could not mark invite as accepted:', err);
+    // 2A. Direct getDoc lookup via ?invite=<inviteId>
+    if (inviteIdHint) {
+      try {
+        const directSnap = await getDoc(doc(db, 'invites', inviteIdHint));
+        if (directSnap.exists()) {
+          const inv = { inviteId: directSnap.id, ...directSnap.data() };
+          if (inv.status === 'pending' && (inv.email || '').trim().toLowerCase() === cleanEmail) {
+            const claimed = await claimPendingInviteForNewUser(inv);
+            if (claimed) return claimed;
+          }
         }
-
-        appState.userProfile = newProfile;
-        appState.accessStatus = 'ready';
-        appState.claimedInviteNotice = `Welcome to ${inv.clubName || 'your club'}! Your invite as ${newProfile.role.toUpperCase()} has been activated.`;
-        notifyAppState();
-        return { accessStatus: 'ready', userProfile: newProfile, claimedInvite: inv };
+      } catch (err) {
+        console.warn('Direct invite lookup note:', err);
+        if (expectedInviteEmail && expectedInviteEmail !== cleanEmail) {
+          appState.inviteEmailMismatch = {
+            expectedEmail: expectedInviteEmail,
+            signedInEmail: cleanEmail,
+            inviteId: inviteIdHint
+          };
+        } else if (err?.code === 'permission-denied') {
+          appState.inviteEmailMismatch = {
+            expectedEmail: expectedInviteEmail || 'the invited email address',
+            signedInEmail: cleanEmail,
+            inviteId: inviteIdHint
+          };
+        }
       }
-    } catch (err) {
-      console.warn('Invite lookup error:', err);
+    }
+
+    // 2B. Email-based collection query lookup (works even without ?invite= in URL!)
+    if (!appState.authDiagnosticError) {
+      try {
+        const inviteSnap = await getDocs(
+          query(collection(db, 'invites'), where('email', '==', cleanEmail))
+        );
+        const pendingInvites = inviteSnap.docs
+          .map(d => ({ inviteId: d.id, ...d.data() }))
+          .filter(inv => inv.status === 'pending');
+
+        if (pendingInvites.length > 0) {
+          const claimed = await claimPendingInviteForNewUser(pendingInvites[0]);
+          if (claimed) return claimed;
+        }
+      } catch (err) {
+        console.error('Invite lookup error:', err);
+        appState.authDiagnosticError =
+          `Could not verify your pre-authorized email invite (${err.code || err.message}). If your Club Admin already invited ${cleanEmail}, please ensure the latest Firestore rules are deployed.`;
+      }
     }
   }
 
-  // 3. Check if default club needs initial first-ever bootstrap (empty Firebase project only)
+  // 3. Auto-redeem Club Registration Code if provided during signup or via ?code= link
+  if (joinCodeHint && !appState.inviteEmailMismatch) {
+    try {
+      const joined = await joinClubWithCode({
+        joinCode: joinCodeHint,
+        displayName: resolvedName,
+        autoStartSubscriptions: false
+      });
+      if (joined) {
+        return { accessStatus: 'ready', userProfile: joined };
+      }
+    } catch (codeErr) {
+      console.warn('Auto join-code registration note:', codeErr);
+      appState.authDiagnosticError = codeErr.message || 'Could not redeem Club Registration Code.';
+    }
+  }
+
+  // 4. Check if default club needs initial first-ever bootstrap (empty Firebase project only)
   const clubRef = doc(db, 'clubs', DEFAULT_CLUB_ID);
   let clubExists = true;
   try {
@@ -643,7 +793,7 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
     const seed = createInitialSeedData(
       firebaseUser.uid,
       firebaseUser.email || 'neil@straffanafc.ie',
-      firebaseUser.displayName || "Neil D'Rosario"
+      resolvedName || "Neil D'Rosario"
     );
 
     // Create founding Admin user first (allowed when club does not exist yet), then club & seed data
@@ -667,7 +817,7 @@ export async function ensureUserAndClubSeeded(firebaseUser) {
     return { accessStatus: 'ready', userProfile: appState.userProfile };
   }
 
-  // 4. Club exists & user has no profile or invite -> Check pending joinRequests & show Access Gate
+  // 5. Club exists & user has no profile or matching invite yet -> Check legacy joinRequests & show Access Gate
   resetClubRuntimeData();
   appState.userProfile = null;
   let accessStatus = 'needs_onboarding';
@@ -913,6 +1063,29 @@ export function startFirestoreSubscriptions(firebaseUser) {
     );
   }
 
+  // 2C. Watch team access requests (Admin & Lead see club requests; Coach/Viewer see their own requests)
+  const roleForTeamReqs = normalizeRole(appState.userProfile?.role || 'viewer');
+  const teamReqQuery =
+    roleForTeamReqs === 'admin' || roleForTeamReqs === 'lead'
+      ? query(collection(db, 'teamRequests'), where('clubId', '==', clubId))
+      : query(
+          collection(db, 'teamRequests'),
+          where('clubId', '==', clubId),
+          where('uid', '==', firebaseUser.uid)
+        );
+  activeUnsubscribes.push(
+    onSnapshot(
+      teamReqQuery,
+      snap => {
+        appState.allClubTeamRequests = snap.docs
+          .map(d => ({ requestId: d.id, ...d.data() }))
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        notifyAppState();
+      },
+      err => console.warn('Team requests listener note:', err)
+    )
+  );
+
   // 3. Subscribe to Club Users (active in clubId OR multi-club members of clubId)
   let primaryClubUsersMap = {};
   let multiClubUsersMap = {};
@@ -1033,6 +1206,10 @@ function filterAccessibleTeams() {
     return;
   }
   appState.teams = getAccessibleTeamsForProfile(appState.userProfile, appState.allClubTeams);
+  if (appState.teams.length === 0 && !isClubAdmin(appState.userProfile)) {
+    appState.selectedTeamId = '';
+    return;
+  }
   if (
     appState.teams.length > 0 &&
     !appState.teams.some(t => t.teamId === appState.selectedTeamId)
@@ -1044,6 +1221,16 @@ function filterAccessibleTeams() {
 
 // --- HELPER SELECTORS ---
 export function getSelectedTeam() {
+  if (appState.userProfile && !isClubAdmin(appState.userProfile) && appState.teams.length === 0) {
+    return {
+      teamId: '',
+      clubId: getActiveClubId(),
+      name: 'No Team Assigned',
+      ageGroup: '',
+      defaultFormation: '7v7',
+      defaultQtrMins: 12
+    };
+  }
   return (
     appState.teams.find(t => t.teamId === appState.selectedTeamId) ||
     appState.allClubTeams.find(t => t.teamId === appState.selectedTeamId) ||
@@ -1718,51 +1905,301 @@ export async function setClubJoinCode({ code, active = true, defaultRole = 'coac
   return joinCodeDoc;
 }
 
-export async function submitJoinCodeRequest({ joinCode, displayName = '', note = '' }) {
+/**
+ * Instant self-registration using an active Club Registration Code + signed-in Email/SSO.
+ * Immediately creates the coach's active profile with 0 assigned teams (zero-trust isolation),
+ * so they enter the club workspace right away and can request access to their specific team(s)
+ * for a Club Admin or Age-Group Lead to approve.
+ */
+export async function joinClubWithCode({ joinCode, displayName = '', autoStartSubscriptions = true }) {
   const cleanCode = normalizeJoinCode(joinCode);
   if (!cleanCode) {
-    throw new Error('Please enter a Club Join Code.');
+    throw new Error('Please enter a Club Registration Code.');
   }
 
   const firebaseUser = appState.currentUser;
   if (!firebaseUser) {
-    throw new Error('Please sign in first.');
+    throw new Error('Please sign in with Google or Email first.');
   }
 
   if (appState.mode !== 'firebase') {
-    throw new Error('Join codes are used in Firebase Cloud mode.');
+    throw new Error('Club Registration Codes are used in Firebase Cloud mode.');
   }
 
   const { db } = getFirebaseServices();
   const codeSnap = await getDoc(doc(db, 'joinCodes', cleanCode));
   if (!codeSnap.exists()) {
-    throw new Error(`Join code "${cleanCode}" was not found. Double-check with your Club Admin.`);
+    throw new Error(`Registration code "${cleanCode}" was not found. Double-check with your Club Admin.`);
   }
   const codeData = codeSnap.data();
   if (!codeData.active) {
-    throw new Error(`Join code "${cleanCode}" is currently disabled. Ask your Club Admin for an active code or email invite.`);
+    throw new Error(`Registration code "${cleanCode}" is currently paused. Ask your Club Admin for an active code or email invite.`);
   }
 
-  const requestId = `${codeData.clubId}__${firebaseUser.uid}`;
+  const clubId = codeData.clubId;
+  const clubName = codeData.clubName || clubId;
+  const assignedRole = ['coach', 'viewer'].includes(codeData.defaultRole) ? codeData.defaultRole : 'coach';
+  const cleanEmail = (firebaseUser.email || '').trim().toLowerCase();
+  const cleanName = (displayName || firebaseUser.displayName || cleanEmail.split('@')[0] || 'Coach').trim();
+  const now = new Date().toISOString();
+
+  const newMembership = {
+    clubId,
+    clubName,
+    role: assignedRole,
+    status: 'active',
+    assignedTeamIds: [],
+    assignedAgeGroups: [],
+    canViewSplitter: true,
+    canViewStats: true
+  };
+
+  const userRef = doc(db, 'users', firebaseUser.uid);
+  const existingSnap = await getDoc(userRef);
+
+  if (existingSnap.exists()) {
+    const existing = existingSnap.data();
+    if (existing.clubMemberships && existing.clubMemberships[clubId]) {
+      // Already a member of this club -> switch cleanly to it
+      await switchActiveClub(clubId);
+      return appState.userProfile;
+    }
+    const mergedMemberships = {
+      ...buildSeededMembershipsForUser(existing),
+      [clubId]: newMembership
+    };
+    const mergedClubIds = Array.from(
+      new Set([...(existing.memberClubIds || [existing.clubId]), clubId])
+    );
+    const patch = {
+      clubId,
+      role: assignedRole,
+      status: 'active',
+      assignedTeamIds: [],
+      assignedAgeGroups: [],
+      canViewSplitter: true,
+      canViewStats: true,
+      joinedViaCode: cleanCode,
+      clubMemberships: mergedMemberships,
+      memberClubIds: mergedClubIds,
+      updatedAt: now
+    };
+    await setDoc(userRef, patch, { merge: true });
+    appState.userProfile = { ...existing, ...patch };
+  } else {
+    const freshProfile = {
+      uid: firebaseUser.uid,
+      email: cleanEmail,
+      displayName: cleanName,
+      role: assignedRole,
+      status: 'active',
+      clubId,
+      assignedTeamIds: [],
+      assignedAgeGroups: [],
+      canViewSplitter: true,
+      canViewStats: true,
+      memberClubIds: [clubId],
+      clubMemberships: {
+        [clubId]: newMembership
+      },
+      joinedViaCode: cleanCode,
+      createdAt: now,
+      updatedAt: now
+    };
+    await setDoc(userRef, freshProfile);
+    appState.userProfile = freshProfile;
+  }
+
+  clearAccessGateSubscriptions();
+  resetClubRuntimeData();
+  appState.pendingJoinRequest = null;
+  appState.authDiagnosticError = null;
+  appState.inviteEmailMismatch = null;
+  appState.accessStatus = 'ready';
+  appState.claimedInviteNotice = `✅ Profile created for ${clubName}! Request access to your team(s) below so your Admin or Age-Group Lead can unlock your squad.`;
+  notifyAppState();
+
+  if (autoStartSubscriptions) {
+    startFirestoreSubscriptions(firebaseUser);
+  }
+  return appState.userProfile;
+}
+
+// Backward-compatible alias
+export async function submitJoinCodeRequest(args) {
+  return joinClubWithCode(args);
+}
+
+// --- TEAM ACCESS REQUESTS (COACH REQUESTS SPECIFIC TEAM; ADMIN OR AGE-GROUP LEAD APPROVES) ---
+
+export async function requestTeamAccess({ teamId, note = '' }) {
+  if (!teamId) throw new Error('Please select a team to request.');
+  const profile = appState.userProfile;
+  if (!profile) throw new Error('Sign in and join a club first.');
+  const clubId = getActiveClubId();
+  const team = (appState.allClubTeams || []).find(t => t.teamId === teamId);
+  if (!team) throw new Error('Selected team was not found in this club.');
+
+  if ((profile.assignedTeamIds || []).includes(teamId)) {
+    throw new Error(`You already have access to ${team.name}.`);
+  }
+
+  const requestId = `${clubId}__${profile.uid}__${teamId}`;
   const reqDoc = {
     requestId,
-    clubId: codeData.clubId,
-    clubName: codeData.clubName || 'Club',
-    uid: firebaseUser.uid,
-    email: (firebaseUser.email || '').trim().toLowerCase(),
-    displayName: (displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Coach').trim(),
-    joinCode: cleanCode,
-    requestedRole: codeData.defaultRole || 'coach',
+    clubId,
+    teamId,
+    teamName: team.name,
+    ageGroup: team.ageGroup || 'U10',
+    uid: profile.uid,
+    email: (profile.email || appState.currentUser?.email || '').trim().toLowerCase(),
+    displayName: profile.displayName || appState.currentUser?.displayName || 'Coach',
     note: (note || '').trim(),
     status: 'pending',
     createdAt: new Date().toISOString()
   };
 
-  await setDoc(doc(db, 'joinRequests', requestId), reqDoc);
-  appState.pendingJoinRequest = reqDoc;
-  appState.accessStatus = 'pending_approval';
-  notifyAppState();
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(doc(db, 'teamRequests', requestId), reqDoc);
+  } else {
+    const store = loadLocalStore();
+    if (!store.teamRequests) store.teamRequests = {};
+    store.teamRequests[requestId] = reqDoc;
+    saveLocalStore(store);
+  }
   return reqDoc;
+}
+
+export async function cancelTeamAccessRequest(requestId) {
+  if (!requestId) return;
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await deleteDoc(doc(db, 'teamRequests', requestId));
+  } else {
+    const store = loadLocalStore();
+    if (store.teamRequests) {
+      delete store.teamRequests[requestId];
+      saveLocalStore(store);
+    }
+  }
+}
+
+export async function approveTeamAccessRequest(requestId) {
+  const req = (appState.allClubTeamRequests || []).find(r => r.requestId === requestId);
+  if (!req) throw new Error('Team access request not found.');
+  if (!canApproveTeamRequest(appState.userProfile, req)) {
+    throw new Error('Only a Club Admin or the Age-Group Lead for this age group can approve this team request.');
+  }
+
+  const clubId = req.clubId || getActiveClubId();
+  const clubName = appState.club?.shortName || appState.club?.name || clubId;
+  const now = new Date().toISOString();
+
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    const targetRef = doc(db, 'users', req.uid);
+    const targetSnap = await getDoc(targetRef);
+    if (!targetSnap.exists()) {
+      throw new Error('Coach user profile no longer exists.');
+    }
+    const targetUser = targetSnap.data();
+    const existingMemberships = buildSeededMembershipsForUser(targetUser);
+    const prevClubEntry = existingMemberships[clubId] || {
+      clubId,
+      clubName,
+      role: normalizeRole(targetUser.role || 'coach'),
+      status: targetUser.status || 'active',
+      assignedTeamIds: Array.isArray(targetUser.assignedTeamIds) ? [...targetUser.assignedTeamIds] : [],
+      assignedAgeGroups: Array.isArray(targetUser.assignedAgeGroups) ? [...targetUser.assignedAgeGroups] : [],
+      canViewSplitter: targetUser.canViewSplitter !== false,
+      canViewStats: targetUser.canViewStats !== false
+    };
+
+    const nextClubTeams = Array.from(new Set([...(prevClubEntry.assignedTeamIds || []), req.teamId]));
+    const nextMemberships = {
+      ...existingMemberships,
+      [clubId]: {
+        ...prevClubEntry,
+        assignedTeamIds: nextClubTeams
+      }
+    };
+    const isUsersActiveClub = (targetUser.clubId || clubId) === clubId;
+    const nextTopTeams = isUsersActiveClub
+      ? Array.from(new Set([...(targetUser.assignedTeamIds || []), req.teamId]))
+      : targetUser.assignedTeamIds || [];
+
+    const userPatch = isUsersActiveClub
+      ? {
+          assignedTeamIds: nextTopTeams,
+          clubMemberships: nextMemberships,
+          approvedTeamRequestId: requestId,
+          updatedAt: now
+        }
+      : {
+          clubMemberships: nextMemberships,
+          approvedTeamRequestId: requestId,
+          updatedAt: now
+        };
+
+    // Update user profile FIRST while teamRequests/{requestId} is still `pending` (validated by Firestore rules!)
+    await setDoc(targetRef, userPatch, { merge: true });
+    await setDoc(
+      doc(db, 'teamRequests', requestId),
+      {
+        status: 'approved',
+        reviewedBy: appState.userProfile?.uid || 'local_coach_1',
+        reviewedByName: appState.userProfile?.displayName || 'Admin',
+        reviewedAt: now
+      },
+      { merge: true }
+    );
+  } else {
+    const store = loadLocalStore();
+    const target = store.users?.[req.uid];
+    if (target) {
+      target.assignedTeamIds = Array.from(new Set([...(target.assignedTeamIds || []), req.teamId]));
+      if (target.clubMemberships?.[clubId]) {
+        target.clubMemberships[clubId].assignedTeamIds = Array.from(
+          new Set([...(target.clubMemberships[clubId].assignedTeamIds || []), req.teamId])
+        );
+      }
+    }
+    if (store.teamRequests?.[requestId]) {
+      store.teamRequests[requestId].status = 'approved';
+      store.teamRequests[requestId].reviewedAt = now;
+    }
+    saveLocalStore(store);
+  }
+  return req;
+}
+
+export async function rejectTeamAccessRequest(requestId) {
+  const req = (appState.allClubTeamRequests || []).find(r => r.requestId === requestId);
+  if (!req) return;
+  if (!canApproveTeamRequest(appState.userProfile, req)) {
+    throw new Error('Only a Club Admin or Age-Group Lead for this age group can decline this request.');
+  }
+  const now = new Date().toISOString();
+  if (appState.mode === 'firebase') {
+    const { db } = getFirebaseServices();
+    await setDoc(
+      doc(db, 'teamRequests', requestId),
+      {
+        status: 'rejected',
+        reviewedBy: appState.userProfile?.uid || 'local_coach_1',
+        reviewedAt: now
+      },
+      { merge: true }
+    );
+  } else {
+    const store = loadLocalStore();
+    if (store.teamRequests?.[requestId]) {
+      store.teamRequests[requestId].status = 'rejected';
+      store.teamRequests[requestId].reviewedAt = now;
+    }
+    saveLocalStore(store);
+  }
 }
 
 export async function cancelPendingJoinRequest(requestId) {

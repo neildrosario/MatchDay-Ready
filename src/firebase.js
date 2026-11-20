@@ -97,6 +97,7 @@ export function getFirebaseServices() {
     appInstance = getApps().length ? getApp() : initializeApp(config);
     authInstance = getAuth(appInstance);
     googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
     try {
       dbInstance = initializeFirestore(appInstance, {
         localCache: persistentLocalCache({

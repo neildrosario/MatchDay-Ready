@@ -98,8 +98,13 @@
       <span><strong>Read-Only Viewer Mode:</strong> You can view lineups, timer, stats &amp; export Share Sheets, while editing is disabled.</span>
     </div>
 
-    <div id="noTeamsAssignedBanner" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-lg p-2 mb-2 text-xs text-amber-200">
-      ℹ️ You have no teams assigned yet. Ask your Club Admin to assign you to a team or age group.
+    <div id="leadTeamRequestsBanner" class="hidden bg-sky-950/70 border border-sky-500/50 rounded-lg p-2.5 mb-2 text-xs text-sky-100 space-y-2">
+      <div class="font-bold text-sky-300">📋 Pending Team Access Requests (Your Age Group)</div>
+      <div id="leadTeamRequestsList" class="space-y-1.5"></div>
+    </div>
+
+    <div id="noTeamsAssignedBanner" class="hidden bg-amber-500/15 border border-amber-500/40 rounded-lg p-2.5 mb-2 text-xs text-amber-200">
+      ℹ️ You have no teams assigned yet. Select a team below to request access from your Club Admin or Age-Group Lead.
     </div>
 
     <!-- COLLAPSIBLE MATCH DETAILS (Date, Opposition & Saved Matches) -->
@@ -650,6 +655,11 @@
         <button id="authTabSignup" onclick="toggleAuthMode('signup')" class="flex-1 py-1.5 rounded font-bold text-xs text-slate-400">Register Coach</button>
       </div>
 
+      <div id="authInviteBanner" class="hidden bg-emerald-500/20 border border-emerald-500/50 text-emerald-200 text-xs p-2.5 rounded-lg mb-3">
+        <div class="font-bold text-emerald-300 mb-0.5">✉️ Pre-Authorized Coach Invite</div>
+        <div id="authInviteBannerText" class="text-[11px] leading-snug"></div>
+      </div>
+
       <div id="authErrorText" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded mb-3"></div>
 
       <form onsubmit="handleEmailAuthSubmit(event)" class="space-y-2.5 text-xs mb-3">
@@ -665,6 +675,10 @@
           <label class="block text-slate-400 mb-1">Password:</label>
           <input type="password" id="authPasswordInput" placeholder="••••••••" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
         </div>
+        <div id="authJoinCodeWrapper" class="hidden">
+          <label class="block text-slate-400 mb-1">Club Registration Code <span class="text-slate-500">(skip if invited by email)</span>:</label>
+          <input type="text" id="authJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-emerald-500/40 text-emerald-200 font-mono uppercase tracking-wider font-bold">
+        </div>
         <button type="submit" id="authSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
           Sign In
         </button>
@@ -674,7 +688,7 @@
         <span>G</span> Continue with Google
       </button>
 
-      <button onclick="openClubHubModal('join')" class="w-full bg-slate-700 hover:bg-slate-600 text-emerald-300 py-1.5 rounded-lg font-bold text-[11px] mb-3 border border-slate-600">
+      <button id="authClubHubBtn" onclick="openClubHubModal('join')" class="hidden w-full bg-slate-700 hover:bg-slate-600 text-emerald-300 py-1.5 rounded-lg font-bold text-[11px] mb-3 border border-slate-600">
         🏟️ Switch Club / Join or Register a Club
       </button>
 
@@ -705,10 +719,22 @@
         <button id="accessGateCloseBtn" onclick="closeClubHubModal()" class="hidden text-slate-400 hover:text-white font-bold px-1.5 py-0.5">✕</button>
       </div>
 
+      <!-- Pre-Authorized Invite Email Mismatch Banner (wrong Google account picked) -->
+      <div id="accessGateMismatchBanner" class="hidden bg-amber-950/60 border border-amber-500/50 rounded-lg p-3 text-xs space-y-2"></div>
+
+      <!-- Real Auth / Firestore Diagnostic Error Banner (never silently swallowed) -->
+      <div id="accessGateDiagnosticBanner" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs p-2.5 rounded-lg leading-snug"></div>
+
       <!-- Existing Clubs Switcher (shown when opened manually by an active member) -->
       <div id="accessGateMyClubsSection" class="hidden space-y-1.5">
         <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Your Clubs</div>
         <div id="accessGateMyClubsList" class="space-y-1.5 max-h-36 overflow-y-auto"></div>
+      </div>
+
+      <!-- Request Access to Additional Club Teams (shown in Club Hub for active coaches) -->
+      <div id="accessGateRequestTeamSection" class="hidden space-y-1.5">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Request Access to a Club Team</div>
+        <div id="accessGateRequestTeamList" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
       </div>
 
       <!-- Pending Email Invites for this user -->
@@ -750,29 +776,25 @@
           <button id="onboardingTabCreate" type="button" onclick="toggleOnboardingTab('create')" class="flex-1 py-1.5 rounded font-semibold text-xs text-slate-400">🏟️ Register New Club</button>
         </div>
 
-        <!-- Tab 1: Join via Club Code or Re-Check Email Invite -->
+        <!-- Tab 1: Join via Club Registration Code or Re-Check Email Invite -->
         <div id="onboardingPanelJoin" class="space-y-2.5">
           <p class="text-[11px] text-slate-300 leading-relaxed">
-            Enter a <strong>Club Join Code</strong> from your Club Admin, or check for a pending <strong>Email Invite</strong>:
+            Enter your <strong>Club Registration Code</strong> to create your coach profile immediately, then request access to your team(s):
           </p>
 
           <div id="accessGateError" class="hidden bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs p-2 rounded"></div>
 
           <form onsubmit="handleSubmitJoinCodeUI(event)" class="space-y-2 text-xs">
             <div>
-              <label class="block text-slate-400 mb-1 font-semibold">Club Join Code:</label>
+              <label class="block text-slate-400 mb-1 font-semibold">Club Registration Code:</label>
               <input type="text" id="accessGateJoinCodeInput" placeholder="e.g. STRAFFAN-2026" class="w-full bg-slate-900 p-2 rounded border border-slate-600 text-white font-mono uppercase tracking-wider font-bold">
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">Your Name:</label>
+              <label class="block text-slate-400 mb-1">Your Coach Name:</label>
               <input type="text" id="accessGateNameInput" placeholder="e.g. Alex Murphy" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
             </div>
-            <div>
-              <label class="block text-slate-400 mb-1">Team / Role Note (Optional):</label>
-              <input type="text" id="accessGateNoteInput" placeholder="e.g. U10 Green assistant coach" class="w-full bg-slate-900 p-2 rounded border border-slate-700 text-white">
-            </div>
             <button type="submit" id="accessGateSubmitBtn" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-bold text-xs shadow">
-              🔑 Request Club Access
+              🔑 Join Club &amp; Create Coach Profile
             </button>
           </form>
 

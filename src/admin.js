@@ -19,6 +19,8 @@ import {
   removeCoachProfile,
   approveJoinRequest,
   rejectJoinRequest,
+  approveTeamAccessRequest,
+  rejectTeamAccessRequest,
   promoteAgeGroupForNewSeason
 } from './db.js';
 import {
@@ -84,9 +86,13 @@ export function renderAdminNavBadge() {
   if (navBtn) {
     navBtn.classList.toggle('hidden', !isAdmin);
     if (isAdmin) {
-      const pendingCount = (appState.allClubJoinRequests || []).filter(
+      const pendingJoinCount = (appState.allClubJoinRequests || []).filter(
         r => r.status === 'pending'
       ).length;
+      const pendingTeamCount = (appState.allClubTeamRequests || []).filter(
+        r => r.status === 'pending'
+      ).length;
+      const pendingCount = pendingJoinCount + pendingTeamCount;
       const badge =
         pendingCount > 0
           ? `<span class="absolute top-1 right-2 bg-amber-400 text-slate-950 text-[9px] font-extrabold leading-none px-1.5 py-0.5 rounded-full shadow">${pendingCount}</span>`
@@ -207,6 +213,8 @@ export function renderAdminDashboard() {
   const users = appState.allClubUsers || [];
   const pendingInvites = (appState.allClubInvites || []).filter(i => i.status === 'pending');
   const pendingRequests = (appState.allClubJoinRequests || []).filter(r => r.status === 'pending');
+  const pendingTeamRequests = (appState.allClubTeamRequests || []).filter(r => r.status === 'pending');
+  const totalPendingApprovals = pendingRequests.length + pendingTeamRequests.length;
   const ageGroups = getClubAgeGroups(teams);
 
   // Update sub-tab button styles
@@ -223,8 +231,8 @@ export function renderAdminDashboard() {
   const peopleTabBtn = document.getElementById('admin-subtab-people');
   if (peopleTabBtn) {
     peopleTabBtn.innerHTML =
-      pendingRequests.length > 0
-        ? `👥 Staff <span class="bg-amber-400 text-slate-950 text-[9px] font-extrabold px-1 rounded-full">${pendingRequests.length}</span>`
+      totalPendingApprovals > 0
+        ? `👥 Staff <span class="bg-amber-400 text-slate-950 text-[9px] font-extrabold px-1 rounded-full">${totalPendingApprovals}</span>`
         : '👥 Staff';
   }
 
@@ -232,17 +240,17 @@ export function renderAdminDashboard() {
   if (!body) return;
 
   if (activeAdminSection === 'overview') {
-    renderOverviewSection(body, { teams, players, users, pendingInvites, pendingRequests });
+    renderOverviewSection(body, { teams, players, users, pendingInvites, pendingRequests, pendingTeamRequests });
   } else if (activeAdminSection === 'teams') {
     renderTeamsSection(body, { teams, players, users, ageGroups });
   } else if (activeAdminSection === 'season') {
     renderSeasonSection(body, { teams, players, users, ageGroups });
   } else {
-    renderPeopleSection(body, { teams, users, pendingInvites, pendingRequests, ageGroups });
+    renderPeopleSection(body, { teams, users, pendingInvites, pendingRequests, pendingTeamRequests, ageGroups });
   }
 }
 
-function renderOverviewSection(container, { teams, players, users, pendingInvites, pendingRequests }) {
+function renderOverviewSection(container, { teams, players, users, pendingInvites, pendingRequests, pendingTeamRequests = [] }) {
   const club = appState.club || {};
   const activeStaff = users.filter(u => !u.isInvite && (!u.status || u.status === 'active')).length;
   const totalMatches = Object.keys(appState.allMatches || {}).length;
@@ -271,10 +279,10 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
     </div>
 
     ${
-      pendingRequests.length > 0 || pendingInvites.length > 0
+      pendingRequests.length > 0 || pendingTeamRequests.length > 0 || pendingInvites.length > 0
         ? `<div class="bg-amber-950/30 border border-amber-500/40 rounded-lg p-2.5 flex items-center justify-between gap-2 text-xs">
             <span class="text-amber-200">
-              ⏳ <strong>${pendingRequests.length}</strong> join request(s) &amp; <strong>${pendingInvites.length}</strong> pending email invite(s)
+              ⏳ <strong>${pendingTeamRequests.length + pendingRequests.length}</strong> pending access request(s) &amp; <strong>${pendingInvites.length}</strong> pending email invite(s)
             </span>
             <button onclick="setAdminSubTab('people')" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] px-2.5 py-1 rounded">Review</button>
           </div>`
@@ -335,8 +343,8 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
     <div class="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2.5 text-xs">
       <div class="flex items-center justify-between gap-2">
         <div>
-          <h4 class="font-bold text-emerald-400">🔑 Club Join Code &amp; Approval Queue</h4>
-          <p class="text-[10px] text-slate-400">New coaches entering this code wait in your approval queue before accessing club data.</p>
+          <h4 class="font-bold text-emerald-400">🔑 Club Registration Code &amp; Team Requests</h4>
+          <p class="text-[10px] text-slate-400">New coaches entering this code create their coach profile immediately and request access to their team(s) for you or an Age-Group Lead to approve.</p>
         </div>
         <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${
           joinEnabled
@@ -421,7 +429,7 @@ function renderOverviewSection(container, { teams, players, users, pendingInvite
   });
 }
 
-function renderPeopleSection(container, { teams, users, pendingInvites, pendingRequests, ageGroups }) {
+function renderPeopleSection(container, { teams, users, pendingInvites, pendingRequests, pendingTeamRequests = [], ageGroups }) {
   const club = appState.club || {};
   const joinCode = club.joinCode || 'Not Set';
   const joinEnabled = club.joinCodeEnabled !== false;
@@ -440,10 +448,35 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
     return true;
   });
 
+  const teamRequestsHtml =
+    pendingTeamRequests.length === 0
+      ? ''
+      : pendingTeamRequests
+          .map(
+            r => `
+              <div class="bg-sky-950/35 border border-sky-500/40 rounded-lg p-2.5 space-y-1.5 text-xs">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-bold text-white truncate">${escapeHtml(r.displayName || 'Coach')} <span class="text-sky-300 font-normal">requested</span> <span class="text-emerald-300">🛡️ ${escapeHtml(r.teamName || r.teamId)}</span></div>
+                    <div class="text-[10px] text-slate-300 truncate">${escapeHtml(r.email || '')} • ${escapeHtml(r.ageGroup || '')}</div>
+                  </div>
+                  <span class="text-[9px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded border border-sky-500/30 font-bold shrink-0">TEAM REQ</span>
+                </div>
+                <div class="flex gap-1.5 pt-1">
+                  <button data-admin-approve-team="${escapeHtml(r.requestId)}" class="admin-approve-team-btn flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] py-1.5 rounded">✓ Approve Team Access</button>
+                  <button data-admin-reject-team="${escapeHtml(r.requestId)}" class="admin-reject-team-btn bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] px-3 py-1.5 rounded">✕ Decline</button>
+                </div>
+              </div>
+            `
+          )
+          .join('');
+
+  const totalQueueCount = pendingTeamRequests.length + pendingRequests.length;
   const requestsHtml =
-    pendingRequests.length === 0
-      ? `<p class="text-[11px] text-slate-500 italic">No pending join requests right now.</p>`
-      : pendingRequests
+    totalQueueCount === 0
+      ? `<p class="text-[11px] text-slate-500 italic">No pending team or club access requests right now.</p>`
+      : teamRequestsHtml +
+        pendingRequests
           .map(r => {
             const teamCbs = teams
               .map(
@@ -695,10 +728,10 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
       </div>
     </div>
 
-    <!-- Pending Join Requests -->
-    <div class="bg-slate-800 border ${pendingRequests.length > 0 ? 'border-amber-500/50' : 'border-slate-700'} rounded-lg p-3 space-y-2">
+    <!-- Pending Team & Club Access Requests -->
+    <div class="bg-slate-800 border ${totalQueueCount > 0 ? 'border-amber-500/50' : 'border-slate-700'} rounded-lg p-3 space-y-2">
       <div class="flex items-center justify-between">
-        <h4 class="text-xs font-bold text-amber-400">⏳ Approval Queue (${pendingRequests.length})</h4>
+        <h4 class="text-xs font-bold text-amber-400">⏳ Approval Queue (${totalQueueCount})</h4>
       </div>
       <div class="space-y-2">${requestsHtml}</div>
     </div>
@@ -769,6 +802,32 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
       <div class="space-y-2">${membersHtml}</div>
     </div>
   `;
+
+  // Bind Team Access Request Approve / Reject
+  container.querySelectorAll('.admin-approve-team-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const reqId = btn.getAttribute('data-admin-approve-team');
+      try {
+        const res = await approveTeamAccessRequest(reqId);
+        alert(`✅ Approved ${res.displayName || res.email} for ${res.teamName}! Their phone will unlock automatically.`);
+      } catch (e) {
+        alert(e.message || 'Could not approve team request.');
+      }
+    });
+  });
+
+  container.querySelectorAll('.admin-reject-team-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const reqId = btn.getAttribute('data-admin-reject-team');
+      if (confirm('Decline this team access request?')) {
+        try {
+          await rejectTeamAccessRequest(reqId);
+        } catch (e) {
+          alert(e.message || 'Could not decline team request.');
+        }
+      }
+    });
+  });
 
   // Bind Join Request Approve / Reject
   container.querySelectorAll('.admin-approve-btn').forEach(btn => {
@@ -851,10 +910,11 @@ function renderPeopleSection(container, { teams, users, pendingInvites, pendingR
       const inv = (appState.allClubInvites || []).find(i => i.inviteId === btn.getAttribute('data-admin-copy-inv'));
       if (!inv) return;
       const clubName = appState.club?.shortName || 'MatchDay Ready';
-      const msg = `⚽ You've been invited to *${clubName}* on MatchDay Ready as *${getRoleMeta(inv.role).label}*!\n\nOpen: ${window.location.origin}\nSign in with: *${inv.email}*`;
+      const inviteLink = `${window.location.origin}/?invite=${encodeURIComponent(inv.inviteId)}&email=${encodeURIComponent(inv.email)}`;
+      const msg = `⚽ You've been pre-authorized for *${clubName}* on MatchDay Ready as *${getRoleMeta(inv.role).label}*!\n\n1. Open: ${inviteLink}\n2. Sign in with Google SSO (or email: *${inv.email}*)\n\nNo registration code needed — your teams are ready!`;
       try {
         await navigator.clipboard.writeText(msg);
-        alert('📋 WhatsApp invite message copied!');
+        alert('📋 Pre-authorized WhatsApp invite link copied!');
       } catch (_) {
         prompt('Copy invite message:', msg);
       }
