@@ -185,24 +185,36 @@ export function getApprovableTeamRequests(profile, allTeamRequests = []) {
 
 /**
  * Allows a Club Admin to optionally switch their active UI view into Age-Group Lead mode
- * (e.g. seeing only their own U10 teams: U10 White & U10 Green) without losing real Admin
+ * (e.g. seeing only their own U8 teams: U8 Green & U8 White) without losing real Admin
  * permissions in Firestore. Non-admins always receive their exact profile unchanged.
  */
-export function getEffectiveUserProfile(profile, viewAsRole = 'admin', allClubTeams = []) {
+export function getEffectiveUserProfile(profile, viewAsRole = 'admin', allClubTeams = [], overrideAgeGroup = '') {
   if (!profile || !isClubAdmin(profile) || viewAsRole !== 'lead') {
     return profile;
   }
 
   const teams = allClubTeams || [];
-  let leadAgeGroups = Array.isArray(profile.assignedAgeGroups)
-    ? profile.assignedAgeGroups.filter(Boolean)
-    : [];
+  let leadAgeGroups = [];
 
-  if (leadAgeGroups.length === 0) {
-    if (teams.some(t => t && t.ageGroup === 'U10')) {
-      leadAgeGroups = ['U10'];
+  if (overrideAgeGroup && typeof overrideAgeGroup === 'string') {
+    leadAgeGroups = [overrideAgeGroup.trim()];
+  } else {
+    const saved = Array.isArray(profile.assignedAgeGroups)
+      ? profile.assignedAgeGroups.filter(Boolean)
+      : [];
+    // Use saved age groups if teams exist for them (or if club has no teams yet)
+    const savedHasTeams =
+      teams.length === 0 || saved.some(ag => teams.some(t => t && t.ageGroup === ag));
+    if (saved.length > 0 && savedHasTeams) {
+      leadAgeGroups = saved;
+    } else if (teams.some(t => t && t.ageGroup === 'U8')) {
+      leadAgeGroups = ['U8'];
     } else if (teams.length > 0 && teams[0].ageGroup) {
       leadAgeGroups = [teams[0].ageGroup];
+    } else if (saved.length > 0) {
+      leadAgeGroups = saved;
+    } else {
+      leadAgeGroups = ['U8'];
     }
   }
 

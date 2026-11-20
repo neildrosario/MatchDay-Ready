@@ -193,6 +193,7 @@ export const appState = {
   currentUser: null, // Firebase auth user or local user profile
   userProfile: null, // Real document from `users` collection
   adminViewAsRole: 'admin', // 'admin' | 'lead' — lets Club Admin switch to Age-Group Lead view for their own teams
+  adminLeadAgeGroup: localStorage.getItem('matchday_admin_lead_ag_v1') || '', // Optional selected age group for Admin Lead View (e.g. 'U8')
   club: null,
   teams: [], // Teams accessible to this user
   allClubTeams: [], // All teams in club (for shared player badges & admin)
@@ -229,14 +230,21 @@ export function getActiveUserProfile() {
   return getEffectiveUserProfile(
     appState.userProfile,
     appState.adminViewAsRole,
-    appState.allClubTeams
+    appState.allClubTeams,
+    appState.adminLeadAgeGroup
   );
 }
 
-export function setAdminRoleView(mode = 'admin') {
+export function setAdminRoleView(mode = 'admin', ageGroup = '') {
   if (!isClubAdmin(appState.userProfile)) {
     appState.adminViewAsRole = 'admin';
     return;
+  }
+  if (ageGroup) {
+    appState.adminLeadAgeGroup = ageGroup.trim();
+    try {
+      localStorage.setItem('matchday_admin_lead_ag_v1', appState.adminLeadAgeGroup);
+    } catch (_) {}
   }
   appState.adminViewAsRole = mode === 'lead' ? 'lead' : 'admin';
   filterAccessibleTeams();
@@ -717,7 +725,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
       const leadAgeGroups =
         Array.isArray(profile.assignedAgeGroups) && profile.assignedAgeGroups.length > 0
           ? [...profile.assignedAgeGroups]
-          : ['U10'];
+          : ['U8'];
       const needsAdminUpgrade =
         profile.role !== 'admin' ||
         profile.status !== 'active' ||
@@ -807,7 +815,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
       status: 'active',
       clubId: DEFAULT_CLUB_ID,
       assignedTeamIds: [],
-      assignedAgeGroups: ['U10'],
+      assignedAgeGroups: ['U8'],
       canViewSplitter: true,
       canViewStats: true,
       memberClubIds: [DEFAULT_CLUB_ID],
@@ -818,7 +826,7 @@ export async function ensureUserAndClubSeeded(firebaseUser, options = {}) {
           role: 'admin',
           status: 'active',
           assignedTeamIds: [],
-          assignedAgeGroups: ['U10'],
+          assignedAgeGroups: ['U8'],
           canViewSplitter: true,
           canViewStats: true
         }
@@ -3166,6 +3174,88 @@ export async function publishAgeGroupSquadSplit({
   if (!isFirebase && store) {
     saveLocalStore(store);
   }
+}
+
+/**
+ * Scans browser localStorage for MatchDay Ready Local Sandbox data (`matchday_club_store_v3`, etc.)
+ * so any teams (e.g. U8 Green / U8 White), players, matches (e.g. 14 Nov vs Maynooth), and lineups
+ * previously saved in Local Mode on this device can be restored to Cloud Firestore in 1 tap.
+ */
+export function findLocalSandboxDataToRecover() {
+  try {
+    const candidateKeys = [LOCAL_CLUB_STORE_KEY, 'matchday_club_store_v2', 'matchday_club_store_v1'];
+    for (const key of candidateKeys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const teams = Object.values(parsed.teams || {}).filter(Boolean);
+      const players = Object.values(parsed.players || {}).filter(Boolean);
+      const matches = Object.values(parsed.matches || {}).filter(Boolean);
+      const lineups = Object.values(parsed.lineups || {}).filter(Boolean);
+      if (teams.length > 0 || players.length > 0 || matches.length > 0) {
+        return {
+          sourceKey: key,
+          teams,
+          players,
+          matches,
+          lineups,
+          teamNames: teams.map(t => t.name).filter(Boolean),
+          matchSummaries: matches.map(m => `${m.date || ''} ${m.opposition ? `vs ${m.opposition}` : ''}`.trim())
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('Local sandbox scan note:', e);
+  }
+  return null;
+}
+
+/**
+ * Restores all teams, players, matches, and lineups from Local Sandbox storage (`matchday_club_store_v3`)
+ * into the active Cloud Firestore club (`straffan_afc`), preserving all IDs, dates, oppositions, and swaps.
+ */
+export async function recoverLocalSandboxDataToCloud() {
+  const found = findLocalSandboxDataToRecover();
+  if (!found) {
+    throw new Error('No Local Sandbox data was found in this browser.');
+  }
+  if (appState.mode !== 'firebase') {
+    throw new Error('Sign in to Firebase Cloud mode first to upload local data.');
+  }
+
+  const { db } = getFirebaseServices();
+  const clubId = getActiveClubId();
+  const uid = appState.currentUser?.uid || appState.userProfile?.uid || 'admin';
+
+  for (const t of found.teams) {
+    if (!t.teamId) continue;
+    await setDoc(
+      doc(db, 'teams', t.teamId),
+      { ...t, clubId, coachIds: Array.from(new Set([...(t.coachIds || []), uid])) },
+      { merge: true }
+    );
+  }
+  for (const p of found.players) {
+    if (!p.playerId) continue;
+    await setDoc(doc(db, 'players', p.playerId), { ...p, clubId }, { merge: true });
+  }
+  for (const m of found.matches) {
+    if (!m.matchId) continue;
+    await setDoc(doc(db, 'matches', m.matchId), { ...m, clubId }, { merge: true });
+  }
+  for (const l of found.lineups) {
+    if (!l.lineupId) continue;
+    await setDoc(doc(db, 'lineups', l.lineupId), { ...l, clubId }, { merge: true });
+  }
+
+  return {
+    teamsRestored: found.teams.length,
+    playersRestored: found.players.length,
+    matchesRestored: found.matches.length,
+    lineupsRestored: found.lineups.length,
+    teamNames: found.teamNames
+  };
 }
 
 /**

@@ -18,6 +18,8 @@ import {
   appState,
   getActiveUserProfile,
   setAdminRoleView,
+  findLocalSandboxDataToRecover,
+  recoverLocalSandboxDataToCloud,
   ensureUserAndClubSeeded,
   startFirestoreSubscriptions,
   clearFirestoreSubscriptions,
@@ -37,6 +39,7 @@ import {
 } from './db.js';
 import {
   getRoleMeta,
+  getClubAgeGroups,
   isViewer,
   isClubAdmin,
   isAgeGroupLead,
@@ -247,22 +250,30 @@ export function showAuthModal() {
           ? 'flex-1 py-2 px-2 rounded-lg font-bold text-xs bg-sky-600 text-white border border-sky-400 shadow'
           : 'flex-1 py-2 px-2 rounded-lg font-semibold text-xs bg-slate-900 text-slate-300 border border-slate-700 hover:border-slate-500';
       }
+      const leadAgSel = document.getElementById('authLeadAgeGroupSelect');
+      const clubAgs = getClubAgeGroups(appState.allClubTeams || []);
+      const agOptions = Array.from(new Set([...(clubAgs.length ? clubAgs : ['U8']), appState.adminLeadAgeGroup].filter(Boolean)));
+      const effectiveLead = getActiveUserProfile()?.isRolePreview
+        ? getActiveUserProfile()
+        : null;
+      const selectedLeadAg =
+        appState.adminLeadAgeGroup ||
+        effectiveLead?.assignedAgeGroups?.[0] ||
+        (clubAgs.includes('U8') ? 'U8' : clubAgs[0] || 'U8');
+
+      if (leadAgSel) {
+        leadAgSel.innerHTML = agOptions
+          .map(ag => `<option value="${escapeHtml(ag)}" ${ag === selectedLeadAg ? 'selected' : ''}>${escapeHtml(ag)}</option>`)
+          .join('');
+      }
       if (leadDesc) {
-        const leadPreview = getActiveUserProfile()?.isRolePreview
-          ? getActiveUserProfile()
-          : null;
-        const leadGroups =
-          leadPreview?.assignedAgeGroups ||
-          (appState.userProfile?.assignedAgeGroups?.length
-            ? appState.userProfile.assignedAgeGroups
-            : ['U10']);
         const leadTeams = (appState.allClubTeams || [])
-          .filter(t => leadGroups.includes(t.ageGroup))
+          .filter(t => t.ageGroup === selectedLeadAg)
           .map(t => t.name);
         leadDesc.innerText =
           leadTeams.length > 0
-            ? `Lead View scopes your app to ${leadGroups.join(', ')}: ${leadTeams.join(' & ')}.`
-            : `Lead View scopes your app to your assigned age group (${leadGroups.join(', ')}).`;
+            ? `Lead View scopes your app to ${selectedLeadAg}: ${leadTeams.join(' & ')}.`
+            : `Lead View scopes your app to ${selectedLeadAg}.`;
       }
     }
     return;
@@ -312,10 +323,40 @@ export function hideAuthModal(force = false) {
 }
 
 export function handleSwitchAdminRoleView(mode) {
-  setAdminRoleView(mode);
+  const leadAgSel = document.getElementById('authLeadAgeGroupSelect');
+  const chosenAg = leadAgSel?.value || appState.adminLeadAgeGroup || '';
+  setAdminRoleView(mode, mode === 'lead' ? chosenAg : '');
   hideAuthModal(true);
   if (mode === 'lead' && typeof window.switchView === 'function') {
     window.switchView('pitch');
+  }
+}
+
+export function handleChangeAdminLeadAgeGroup(ageGroup) {
+  if (!ageGroup) return;
+  setAdminRoleView(appState.adminViewAsRole, ageGroup);
+  showAuthModal();
+}
+
+export async function handleRecoverLocalSandboxUI() {
+  const btn = document.getElementById('localDataRecoveryBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = '☁️ Restoring to Cloud Firestore...';
+  }
+  try {
+    const res = await recoverLocalSandboxDataToCloud();
+    alert(
+      `✅ Restored local data to Cloud Firestore!\n\n• ${res.teamsRestored} team(s): ${res.teamNames.join(', ') || 'None'}\n• ${res.playersRestored} player(s)\n• ${res.matchesRestored} match(es)\n• ${res.lineupsRestored} period lineup(s)`
+    );
+    renderAccessGate();
+  } catch (e) {
+    alert(e.message || 'Could not restore local data.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = '☁️ Restore Local Teams, Players & Matches to Cloud';
+    }
   }
 }
 
@@ -902,6 +943,32 @@ export function renderAccessGate() {
     const hasNotice = Boolean(appState.claimedInviteNotice);
     inviteBanner.classList.toggle('hidden', !hasNotice);
     if (hasNotice) inviteText.innerText = appState.claimedInviteNotice;
+  }
+
+  // Local Sandbox Device Data Recovery banner (shown to Club Admin if local device holds teams/matches missing from Cloud)
+  const localRecBanner = document.getElementById('localDataRecoveryBanner');
+  const localRecText = document.getElementById('localDataRecoveryText');
+  if (localRecBanner && localRecText) {
+    const canRecover =
+      appState.mode === 'firebase' &&
+      appState.accessStatus === 'ready' &&
+      appState.syncState === 'synced' &&
+      isClubAdmin(appState.userProfile);
+    const localFound = canRecover ? findLocalSandboxDataToRecover() : null;
+    const cloudMatchCount = Object.keys(appState.allMatches || {}).length;
+    const shouldOfferRecovery =
+      Boolean(localFound) &&
+      (appState.allClubTeams.length === 0 ||
+        localFound.matches.length > cloudMatchCount);
+    localRecBanner.classList.toggle('hidden', !shouldOfferRecovery);
+    if (shouldOfferRecovery && localFound) {
+      const teamLabel = localFound.teamNames.length > 0 ? localFound.teamNames.join(', ') : `${localFound.teams.length} team(s)`;
+      const matchLabel =
+        localFound.matchSummaries.length > 0
+          ? ` • Matches: ${localFound.matchSummaries.slice(0, 3).join(', ')}`
+          : '';
+      localRecText.innerText = `Found ${teamLabel} (${localFound.players.length} players, ${localFound.matches.length} matches${matchLabel}) saved locally on this device.`;
+    }
   }
 
   // Admin viewing as Age-Group Lead banner (one-tap return to full Admin mode)

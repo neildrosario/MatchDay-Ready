@@ -93,6 +93,18 @@
       <button onclick="dismissClaimedInviteNotice()" class="text-emerald-300 hover:text-white font-bold px-1">✕</button>
     </div>
 
+    <div id="localDataRecoveryBanner" class="hidden bg-emerald-950/85 border border-emerald-400/60 rounded-lg p-2.5 mb-2 text-xs text-emerald-100 space-y-2 shadow">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <div class="font-bold text-emerald-300">💾 Local Device Data Detected!</div>
+          <div id="localDataRecoveryText" class="text-[11px] text-slate-200 mt-0.5 leading-snug"></div>
+        </div>
+      </div>
+      <button type="button" id="localDataRecoveryBtn" onclick="handleRecoverLocalSandboxUI()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-1.5 rounded-lg shadow">
+        ☁️ Restore Local Teams, Players &amp; Matches to Cloud
+      </button>
+    </div>
+
     <div id="adminLeadModeBanner" class="hidden bg-sky-950/80 border border-sky-500/50 rounded-lg p-2 mb-2 text-xs text-sky-100 flex items-center justify-between gap-2">
       <div class="flex items-center gap-1.5 min-w-0">
         <span>📋</span>
@@ -679,6 +691,10 @@
             <button id="authRoleSwitchLeadBtn" type="button" onclick="handleSwitchAdminRoleView('lead')" class="flex-1 py-2 px-2 rounded-lg font-semibold text-xs bg-slate-900 text-slate-300 border border-slate-700">
               📋 Lead View
             </button>
+          </div>
+          <div id="authLeadAgeGroupWrap" class="flex items-center gap-2 pt-0.5">
+            <label for="authLeadAgeGroupSelect" class="text-[10px] text-slate-400 font-semibold shrink-0">Lead Age Group:</label>
+            <select id="authLeadAgeGroupSelect" onchange="handleChangeAdminLeadAgeGroup(this.value)" class="flex-1 bg-slate-950 text-sky-300 font-bold text-[11px] px-2 py-1 rounded border border-slate-700"></select>
           </div>
           <p id="authRoleSwitchLeadDesc" class="text-[10px] text-slate-400 leading-snug"></p>
         </div>
