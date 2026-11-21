@@ -219,14 +219,23 @@ html[data-ui="neo"] {
   --neo-att: #e11d48;
 }
 
+html[data-ui="glass-turf"] {
+  --neo-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --neo-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 @supports (transition-timing-function: linear(0, 1)) {
-  html[data-ui="neo"] {
+  :is(html[data-ui="neo"], html[data-ui="glass-turf"]) {
     --neo-spring: linear(
       0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%,
       1.067, 1.099 24.3%, 1.108 26%, 1.103 27.9%, 1.06 32.8%, 1.026 37%,
       1.003 41.6%, 0.992 47.1%, 1 60%, 1
     );
   }
+}
+
+html[data-ui="glass-turf"] body {
+  padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
 }
 
 html[data-ui="neo"] body {
@@ -491,8 +500,8 @@ html[data-ui="neo"] #authModal button.bg-white {
   box-shadow: none;
 }
 
-/* The 3-button action grid is replaced by the floating speed-dial in Neo */
-html[data-ui="neo"] #pitchActionToolbar > .grid {
+/* The 3-button action grid is replaced by the floating speed-dial in Neo and Glass & Turf */
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) #pitchActionToolbar > .grid {
   display: none;
 }
 
@@ -762,23 +771,26 @@ html[data-ui="neo"] #view-stats tbody tr:hover {
 }
 
 /* --------------------------------------------------------------------------
-   10. Bottom sheets (modals)
+   10. Bottom sheets (modals) — Shared by Neo and Glass & Turf
    -------------------------------------------------------------------------- */
-html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
-  background: rgba(11, 11, 15, 0.38);
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
   align-items: flex-end;
   padding: 0;
   animation: neo-fade-in 240ms ease both;
 }
 
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
+  background: rgba(11, 11, 15, 0.38);
+}
+
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
+  :is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
     -webkit-backdrop-filter: blur(6px);
     backdrop-filter: blur(6px);
   }
 }
 
-html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div {
   position: relative;
   width: 100%;
   max-width: 30rem;
@@ -786,16 +798,19 @@ html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #
   max-height: 92dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--neo-surface);
-  color: var(--neo-ink);
-  border: 0;
   border-radius: 28px 28px 0 0;
   padding: 10px 20px calc(22px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -16px 48px -12px rgba(11, 11, 15, 0.3);
   animation: neo-sheet-in 460ms var(--neo-ease) both;
 }
 
-html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div::before {
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div {
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  border: 0;
+  box-shadow: 0 -16px 48px -12px rgba(11, 11, 15, 0.3);
+}
+
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div::before {
   content: "";
   display: block;
   width: 40px;
@@ -805,14 +820,18 @@ html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #
   background: #d9dce2;
 }
 
-html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div h3 {
+html[data-ui="glass-turf"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div::before {
+  background: rgba(167, 243, 208, 0.32);
+}
+
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div h3 {
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div > div:last-child > button,
-html[data-ui="neo"] :is(#swapModal, #eventModal) > div button {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div > div:last-child > button,
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(#swapModal, #eventModal) > div button {
   min-height: 44px;
 }
 
@@ -903,14 +922,14 @@ html[data-ui="neo"] #bottomNav:not(:has(#neoNavIndicator)) button[aria-current="
 }
 
 /* --------------------------------------------------------------------------
-   12. Speed-dial FAB + floating mini timer
+   12. Speed-dial FAB + floating mini timer (Neo + Glass & Turf)
    -------------------------------------------------------------------------- */
-html[data-ui="neo"] .neo-only {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) .neo-only {
   display: block;
 }
 
-html[data-ui="neo"]:not([data-view="pitch"]) :is(#neoFab, #neoMiniTimer),
-html[data-ui="neo"] .neo-fab[data-empty="true"] {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]):not([data-view="pitch"]) :is(#neoFab, #neoMiniTimer),
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) .neo-fab[data-empty="true"] {
   display: none;
 }
 
@@ -922,6 +941,10 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   opacity: 0;
   pointer-events: none;
   transition: opacity 260ms ease;
+}
+
+html[data-ui="glass-turf"] .neo-fab-scrim {
+  background: rgba(3, 12, 10, 0.72);
 }
 
 @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -953,6 +976,13 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   touch-action: manipulation;
 }
 
+html[data-ui="glass-turf"] .neo-fab-toggle {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: 1px solid rgba(110, 231, 183, 0.55);
+  box-shadow: 0 14px 30px -8px rgba(16, 185, 129, 0.75), 0 4px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
 .neo-fab-toggle:active {
   transform: scale(0.92);
 }
@@ -961,6 +991,12 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   background: var(--neo-ink);
   color: var(--neo-lime);
   border-radius: 29px;
+}
+
+html[data-ui="glass-turf"] .neo-fab[data-open="true"] .neo-fab-toggle {
+  background: rgba(7, 22, 18, 0.96);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.65);
 }
 
 .neo-fab-plus {
@@ -1050,6 +1086,13 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   transition: transform 300ms var(--neo-spring);
 }
 
+html[data-ui="glass-turf"] :is(.neo-fab-label, .neo-fab-icon) {
+  background: rgba(11, 29, 24, 0.94);
+  color: #ecfdf5;
+  border: 1px solid rgba(52, 211, 153, 0.38);
+  box-shadow: 0 12px 26px -10px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 .neo-fab-actions > button:active .neo-fab-icon {
   transform: scale(0.9);
 }
@@ -1072,6 +1115,12 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   transform: translateY(24px) scale(0.9);
   pointer-events: none;
   transition: opacity 220ms ease, transform 480ms var(--neo-spring);
+}
+
+html[data-ui="glass-turf"] .neo-mini-timer {
+  background: rgba(7, 21, 17, 0.94);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  box-shadow: 0 16px 34px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .neo-mini-timer[data-visible="true"] {
@@ -1098,6 +1147,10 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   padding-left: 12px;
 }
 
+html[data-ui="glass-turf"] .neo-mini-timer-period {
+  color: #6ee7b7;
+}
+
 .neo-mini-timer-period::before {
   content: "";
   position: absolute;
@@ -1113,6 +1166,10 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
 .neo-mini-timer[data-running="true"] .neo-mini-timer-period::before {
   background: #c6ff3d;
   animation: neo-pulse 1.4s ease-in-out infinite;
+}
+
+html[data-ui="glass-turf"] .neo-mini-timer[data-running="true"] .neo-mini-timer-period::before {
+  background: #34d399;
 }
 
 .neo-mini-timer-readout {
@@ -1138,6 +1195,12 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
   transition: transform 300ms var(--neo-spring);
 }
 
+html[data-ui="glass-turf"] .neo-mini-timer-toggle {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: 1px solid rgba(167, 243, 208, 0.5);
+}
+
 .neo-mini-timer-toggle[hidden] {
   display: none;
 }
@@ -1152,19 +1215,19 @@ html[data-ui="neo"] .neo-fab[data-empty="true"] {
 }
 
 /* --------------------------------------------------------------------------
-   13. Motion
+   13. Motion (Shared by Neo and Glass & Turf)
    -------------------------------------------------------------------------- */
 
 /* Directional tab slides (names only applied during a nav transition) */
-html[data-ui="neo"][data-nav-dir] main {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"])[data-nav-dir] main {
   view-transition-name: neo-main;
 }
 
-html[data-ui="neo"][data-nav-dir] #bottomNav {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"])[data-nav-dir] #bottomNav {
   view-transition-name: neo-dock;
 }
 
-html[data-ui="neo"][data-nav-dir] header {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"])[data-nav-dir] header {
   view-transition-name: neo-header;
 }
 
@@ -1206,21 +1269,21 @@ html[data-nav-dir="back"]::view-transition-new(neo-main) {
 }
 
 /* Smooth accordions (progressive enhancement) */
-html[data-ui="neo"] main details > summary {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main details > summary {
   cursor: pointer;
   list-style: none;
 }
 
-html[data-ui="neo"] main details > summary::-webkit-details-marker {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main details > summary::-webkit-details-marker {
   display: none;
 }
 
 @supports selector(::details-content) {
-  html[data-ui="neo"] {
+  :is(html[data-ui="neo"], html[data-ui="glass-turf"]) {
     interpolate-size: allow-keywords;
   }
 
-  html[data-ui="neo"] main details::details-content {
+  :is(html[data-ui="neo"], html[data-ui="glass-turf"]) main details::details-content {
     block-size: 0;
     overflow: hidden;
     opacity: 0;
@@ -1230,14 +1293,14 @@ html[data-ui="neo"] main details > summary::-webkit-details-marker {
       content-visibility 380ms allow-discrete;
   }
 
-  html[data-ui="neo"] main details[open]::details-content {
+  :is(html[data-ui="neo"], html[data-ui="glass-turf"]) main details[open]::details-content {
     block-size: auto;
     opacity: 1;
   }
 }
 
 /* Tactile press feedback */
-html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button {
   transition:
     transform 350ms var(--neo-spring),
     background-color 200ms ease,
@@ -1247,19 +1310,19 @@ html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authMo
   touch-action: manipulation;
 }
 
-html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button:not(:disabled):active {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button:not(:disabled):active {
   transform: scale(0.97);
 }
 
 /* Gentle entrance for each view's cards on first paint */
-html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > * {
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main > [id^="view-"]:not(.hidden) > * {
   animation: neo-rise 420ms var(--neo-ease) both;
 }
 
-html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(2) { animation-delay: 30ms; }
-html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(3) { animation-delay: 60ms; }
-html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(4) { animation-delay: 90ms; }
-html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(n + 5) { animation-delay: 120ms; }
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main > [id^="view-"]:not(.hidden) > *:nth-child(2) { animation-delay: 30ms; }
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main > [id^="view-"]:not(.hidden) > *:nth-child(3) { animation-delay: 60ms; }
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main > [id^="view-"]:not(.hidden) > *:nth-child(4) { animation-delay: 90ms; }
+:is(html[data-ui="neo"], html[data-ui="glass-turf"]) main > [id^="view-"]:not(.hidden) > *:nth-child(n + 5) { animation-delay: 120ms; }
 
 @keyframes neo-rise {
   from { opacity: 0; transform: translateY(8px); }

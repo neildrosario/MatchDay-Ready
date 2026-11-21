@@ -19,6 +19,11 @@ export function isNeoActive() {
   return getUiTheme() === UI_THEMES.NEO;
 }
 
+export function isAnimatedUiActive() {
+  const theme = getUiTheme();
+  return theme === UI_THEMES.NEO || theme === UI_THEMES.GLASS;
+}
+
 function prefersReducedMotion() {
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -36,15 +41,15 @@ export function getViewTransitionDirection(prevView, nextView, visibleViews = []
 }
 
 /**
- * Runs a DOM update inside a View Transition when Neo is active and supported.
- * Falls back to an immediate synchronous update everywhere else.
+ * Runs a DOM update inside a View Transition when Neo or Glass & Turf is active
+ * and supported. Falls back to an immediate synchronous update everywhere else.
  */
 export function runNeoViewTransition(update, { direction = 'none' } = {}) {
   const canAnimate =
     typeof document !== 'undefined' &&
     typeof document.startViewTransition === 'function' &&
     direction !== 'none' &&
-    isNeoActive() &&
+    isAnimatedUiActive() &&
     !prefersReducedMotion();
 
   if (!canAnimate) {
@@ -116,7 +121,10 @@ function initFab() {
     }
   });
 
-  window.addEventListener('mdr:themechange', () => setOpen(false));
+  window.addEventListener('mdr:themechange', () => {
+    setOpen(false);
+    refreshFabAvailability();
+  });
 }
 
 function refreshFabAvailability() {

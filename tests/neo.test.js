@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getViewTransitionDirection, runNeoViewTransition, isSourceUsable } from '../src/neo.js';
+import {
+  getViewTransitionDirection,
+  runNeoViewTransition,
+  isSourceUsable,
+  isAnimatedUiActive
+} from '../src/neo.js';
 
 describe('Neo UI layer (src/neo.js)', () => {
   const views = ['pitch', 'splitter', 'stats', 'admin'];
@@ -47,5 +52,9 @@ describe('Neo UI layer (src/neo.js)', () => {
     };
     assert.equal(isSourceUsable(viewerRestrictedBtn), false);
     assert.equal(isSourceUsable({ disabled: true, closest: () => null }), false);
+  });
+
+  it('defaults isAnimatedUiActive safely to false in headless Node environment (classic fallback)', () => {
+    assert.equal(isAnimatedUiActive(), false);
   });
 });
