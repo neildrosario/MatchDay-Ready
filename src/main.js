@@ -145,7 +145,6 @@ export function switchView(view) {
 }
 
 function applyViewSwitch(view) {
-  syncNeoView(view);
   document.getElementById('view-pitch')?.classList.toggle('hidden', view !== 'pitch');
   document.getElementById('view-splitter')?.classList.toggle('hidden', view !== 'splitter');
   document.getElementById('view-stats')?.classList.toggle('hidden', view !== 'stats');
@@ -192,6 +191,7 @@ function applyViewSwitch(view) {
   } else {
     renderStats();
   }
+  syncNeoView(view);
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 

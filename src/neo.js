@@ -66,11 +66,15 @@ export function runNeoViewTransition(update, { direction = 'none' } = {}) {
 }
 
 /* --------------------------------------------------------------------------
-   Element visibility helper (respects RBAC-driven .hidden / disabled states)
+   Element visibility helper (respects RBAC-driven .hidden / disabled states,
+   ignoring outer view containers like #view-pitch during view switches)
    -------------------------------------------------------------------------- */
-function isSourceUsable(el) {
+export function isSourceUsable(el) {
   if (!el || el.disabled) return false;
-  if (el.closest('.hidden')) return false;
+  if (typeof el.closest === 'function') {
+    const hiddenAncestor = el.closest('.hidden:not([id^="view-"])');
+    if (hiddenAncestor) return false;
+  }
   return true;
 }
 

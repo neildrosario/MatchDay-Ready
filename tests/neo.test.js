@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getViewTransitionDirection, runNeoViewTransition } from '../src/neo.js';
+import { getViewTransitionDirection, runNeoViewTransition, isSourceUsable } from '../src/neo.js';
 
 describe('Neo UI layer (src/neo.js)', () => {
   const views = ['pitch', 'splitter', 'stats', 'admin'];
@@ -27,5 +27,25 @@ describe('Neo UI layer (src/neo.js)', () => {
       ran = true;
     }, { direction: 'forward' });
     assert.equal(ran, true);
+  });
+
+  it('keeps FAB source buttons usable across view switches while respecting RBAC .hidden on toolbars', () => {
+    // Source inside #view-pitch (even while view transition is switching from Splitter -> Pitch)
+    const activePitchBtn = {
+      disabled: false,
+      closest: selector => {
+        assert.equal(selector, '.hidden:not([id^="view-"])');
+        return null;
+      }
+    };
+    assert.equal(isSourceUsable(activePitchBtn), true);
+
+    // Source inside RBAC-hidden #pitchActionToolbar (e.g. read-only viewer)
+    const viewerRestrictedBtn = {
+      disabled: false,
+      closest: () => ({ id: 'pitchActionToolbar' })
+    };
+    assert.equal(isSourceUsable(viewerRestrictedBtn), false);
+    assert.equal(isSourceUsable({ disabled: true, closest: () => null }), false);
   });
 });
