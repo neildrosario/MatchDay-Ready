@@ -1,11 +1,13 @@
 import './style.css';
 import './theme-glass-turf.css';
+import './theme-neo.css';
 import {
   initUiTheme,
   setUiTheme,
   toggleUiTheme,
   dismissGlassPreviewBanner
 } from './theme.js';
+import { initNeoUi, runNeoViewTransition, syncNeoView, getViewTransitionDirection } from './neo.js';
 import { appState, getActiveUserProfile, subscribeAppState } from './db.js';
 import {
   initAuth,
@@ -136,7 +138,14 @@ export function switchView(view) {
   if (view === 'stats' && !canViewStatsTab(activeProfile)) {
     view = 'pitch';
   }
+  const prevView = currentView;
   currentView = view;
+  const direction = getViewTransitionDirection(prevView, view, getVisibleViews());
+  runNeoViewTransition(() => applyViewSwitch(view), { direction });
+}
+
+function applyViewSwitch(view) {
+  syncNeoView(view);
   document.getElementById('view-pitch')?.classList.toggle('hidden', view !== 'pitch');
   document.getElementById('view-splitter')?.classList.toggle('hidden', view !== 'splitter');
   document.getElementById('view-stats')?.classList.toggle('hidden', view !== 'stats');
@@ -318,6 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
     onSwitchView: switchView
   });
   renderPitch();
+  initNeoUi({ getCurrentView: () => currentView });
 
   // Register PWA Service Worker (Milestone 10)
   if ('serviceWorker' in navigator) {

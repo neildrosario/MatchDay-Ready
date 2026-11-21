@@ -16,7 +16,12 @@
         var params = new URLSearchParams(window.location.search);
         var raw = (params.get('ui') || localStorage.getItem('mdr_ui_theme') || 'classic').trim().toLowerCase();
         var isGlass = raw === 'glass' || raw === 'glass-turf' || raw === 'new' || raw === 'v2' || raw === 'turf' || raw === 'preview';
-        document.documentElement.dataset.ui = isGlass ? 'glass-turf' : 'classic';
+        var isNeo = raw === 'neo' || raw === 'bank' || raw === 'neo-bank' || raw === 'neobank' || raw === 'light' || raw === 'v3';
+        document.documentElement.dataset.ui = isNeo ? 'neo' : (isGlass ? 'glass-turf' : 'classic');
+        if (isNeo) {
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', '#f4f5f7');
+        }
       } catch (e) {
         document.documentElement.dataset.ui = 'classic';
       }
@@ -59,14 +64,36 @@
         <option value="u10_white">🛡️ U10 White (U10)</option>
         <option value="u10_green">🛡️ U10 Green (U10)</option>
       </select>
-      <button id="uiThemeToggleBtn" type="button" onclick="toggleUiTheme()" aria-pressed="false" title="Try the new Matchday Glass & Turf UI preview" class="shrink-0 text-[10px] bg-slate-700/90 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded border border-emerald-500/40 font-bold flex items-center gap-1 whitespace-nowrap transition">
-        <span>✨</span><span>Glass</span>
+      <button id="uiThemeToggleBtn" type="button" popovertarget="uiThemePicker" aria-haspopup="dialog" onclick="if (!('popover' in HTMLElement.prototype)) toggleUiTheme()" title="Change UI style" class="shrink-0 text-[10px] bg-slate-700/90 hover:bg-slate-600 text-emerald-300 px-2 py-1 rounded border border-emerald-500/40 font-bold flex items-center gap-1 whitespace-nowrap transition">
+        <span aria-hidden="true">🌙</span><span>Classic</span><span aria-hidden="true" class="opacity-70">▾</span>
       </button>
       <button onclick="showAuthModal()" id="coachProfileBadge" class="shrink-0 text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-200 px-2 py-1 rounded border border-slate-600 font-semibold truncate max-w-[118px] sm:max-w-[165px]">
         👤 Neil D'Rosario
       </button>
     </div>
   </header>
+
+  <!-- UI STYLE PICKER (Popover List: Classic / Glass & Turf / Neo) -->
+  <div id="uiThemePicker" popover class="ui-theme-picker" role="dialog" aria-label="Choose UI style">
+    <div class="ui-theme-picker-title">UI Style</div>
+    <div role="radiogroup" aria-label="UI style" class="ui-theme-picker-list">
+      <button type="button" role="radio" aria-checked="true" data-theme-option="classic" onclick="setUiTheme('classic')">
+        <span class="ui-theme-picker-swatch" data-swatch="classic" aria-hidden="true">🌙</span>
+        <span class="ui-theme-picker-text"><strong>Classic</strong><small>Original dark sideline UI</small></span>
+        <span class="ui-theme-picker-check" aria-hidden="true">✓</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" data-theme-option="glass-turf" onclick="setUiTheme('glass-turf')">
+        <span class="ui-theme-picker-swatch" data-swatch="glass-turf" aria-hidden="true">✨</span>
+        <span class="ui-theme-picker-text"><strong>Glass &amp; Turf</strong><small>Frosted stadium glass</small></span>
+        <span class="ui-theme-picker-check" aria-hidden="true">✓</span>
+      </button>
+      <button type="button" role="radio" aria-checked="false" data-theme-option="neo" onclick="setUiTheme('neo')">
+        <span class="ui-theme-picker-swatch" data-swatch="neo" aria-hidden="true">⚡</span>
+        <span class="ui-theme-picker-text"><strong>Neo</strong><small>Light, fluid neo-bank style</small></span>
+        <span class="ui-theme-picker-check" aria-hidden="true">✓</span>
+      </button>
+    </div>
+  </div>
 
   <!-- Main Content Container -->
   <main class="max-w-md mx-auto p-2.5">
@@ -187,13 +214,13 @@
       <!-- Action Toolbar (Auto-Fill, Swaps & Match Events — Milestones 11 & 12) -->
       <div id="pitchActionToolbar" class="space-y-1 mb-1.5">
         <div class="grid grid-cols-3 gap-1.5">
-          <button onclick="autoGenerateMatch()" class="bg-indigo-600 hover:bg-indigo-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
+          <button onclick="autoGenerateMatch()" data-neo-src="autofair" class="bg-indigo-600 hover:bg-indigo-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             🪄 Auto-Fair
           </button>
-          <button onclick="openSwapModal()" class="bg-amber-600 hover:bg-amber-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
+          <button onclick="openSwapModal()" data-neo-src="midsub" class="bg-amber-600 hover:bg-amber-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             🔄 Mid-Sub
           </button>
-          <button onclick="openEventModal()" class="bg-emerald-600 hover:bg-emerald-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
+          <button onclick="openEventModal()" data-neo-src="event" class="bg-emerald-600 hover:bg-emerald-500 py-1.5 px-1.5 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 shadow">
             ⚽ + Event
           </button>
         </div>
@@ -294,7 +321,7 @@
       <!-- Bottom Actions -->
       <div class="flex gap-2 pb-3">
         <button id="copyPrevQtrBtn" onclick="copyPreviousQuarter()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2.5 rounded-lg font-semibold text-sm">Copy Prev Qtr</button>
-        <button onclick="exportTeamSheet()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
+        <button onclick="exportTeamSheet()" data-neo-src="share" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-lg font-semibold text-sm">📸 Share Sheet</button>
       </div>
 
       <!-- Custom Team Configuration (Moved below pitch actions; overrides Admin defaults) -->
@@ -553,6 +580,40 @@
       </button>
     </div>
   </nav>
+
+  <!-- NEO UI FLOATING LAYER (Visible only in Neo theme; proxies existing actions) -->
+  <div id="neoFloatLayer" class="neo-only" data-no-swipe>
+    <!-- Floating Mini Timer Pill (appears when the timer card scrolls off-screen) -->
+    <div id="neoMiniTimer" class="neo-mini-timer" data-visible="false" data-state="idle">
+      <button type="button" id="neoMiniTimerJump" class="neo-mini-timer-main" aria-label="Scroll to match timer">
+        <span id="neoMiniTimerPeriod" class="neo-mini-timer-period">Q1</span>
+        <span id="neoMiniTimerReadout" class="neo-mini-timer-readout">00:00</span>
+      </button>
+      <button type="button" id="neoMiniTimerToggle" class="neo-mini-timer-toggle" aria-label="Start or pause match timer">▶</button>
+    </div>
+
+    <!-- Speed-Dial Floating Action Button -->
+    <div id="neoFab" class="neo-fab" data-open="false">
+      <div class="neo-fab-scrim" data-neo-fab-close></div>
+      <div id="neoFabActions" class="neo-fab-actions" role="menu" aria-label="Quick match actions">
+        <button type="button" role="menuitem" data-neo-action="share" style="--i:0">
+          <span class="neo-fab-label">Share Sheet</span><span class="neo-fab-icon" aria-hidden="true">📸</span>
+        </button>
+        <button type="button" role="menuitem" data-neo-action="event" style="--i:1">
+          <span class="neo-fab-label">Log Event</span><span class="neo-fab-icon" aria-hidden="true">⚽</span>
+        </button>
+        <button type="button" role="menuitem" data-neo-action="midsub" style="--i:2">
+          <span class="neo-fab-label">Mid-Sub</span><span class="neo-fab-icon" aria-hidden="true">🔄</span>
+        </button>
+        <button type="button" role="menuitem" data-neo-action="autofair" style="--i:3">
+          <span class="neo-fab-label">Auto-Fair</span><span class="neo-fab-icon" aria-hidden="true">🪄</span>
+        </button>
+      </div>
+      <button type="button" id="neoFabToggle" class="neo-fab-toggle" aria-expanded="false" aria-controls="neoFabActions" aria-label="Quick match actions">
+        <span class="neo-fab-plus" aria-hidden="true"></span>
+      </button>
+    </div>
+  </div>
 
   <!-- MID-QUARTER SWAP MODAL -->
   <div id="swapModal" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 hidden">

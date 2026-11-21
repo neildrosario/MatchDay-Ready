@@ -1,0 +1,1302 @@
+/* ==========================================================================
+   MatchDay Ready — "Neo" Opt-In Visual Theme (light, neo-bank style)
+   Scoped strictly to html[data-ui="neo"]. Zero effect in Classic / Glass.
+   #exportContainer is intentionally outside every selector scope below so
+   html2canvas Share Sheet PNG exports remain identical across all themes.
+
+   Contents
+   0.  Shared (all themes): UI style picker popover + neo-only gating
+   1.  Tokens, canvas & typography
+   2.  Header (frosted light context bar)
+   3.  Surface / text / border remapping of Tailwind dark utilities
+   4.  Buttons (lime primary, ink secondary, soft neutrals)
+   5.  Inputs & form controls
+   6.  Segmented controls (period tabs, admin sub-tabs, auth tabs)
+   7.  Hero timer card (dark "balance" card)
+   8.  Tactical pitch & player chips
+   9.  Role colours (bench, splitter, stats)
+   10. Bottom sheets (modals)
+   11. Floating dock + sliding indicator
+   12. Speed-dial FAB + floating mini timer
+   13. Motion: view transitions, accordions, press feedback
+   14. Accessibility preferences
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   0. Shared (all themes)
+   -------------------------------------------------------------------------- */
+.neo-only,
+#neoNavIndicator {
+  display: none;
+}
+
+/* Popover list. Never set `display` here: UA styles hide closed popovers. */
+.ui-theme-picker {
+  position: fixed;
+  inset: calc(env(safe-area-inset-top, 0px) + 84px) 12px auto auto;
+  margin: 0;
+  width: min(290px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: #1e293b;
+  color: #f1f5f9;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  transform-origin: top right;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.97);
+  transition:
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    overlay 260ms allow-discrete,
+    display 260ms allow-discrete;
+}
+
+.ui-theme-picker:popover-open {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .ui-theme-picker:popover-open {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+
+.ui-theme-picker::backdrop {
+  background: transparent;
+}
+
+.ui-theme-picker-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  padding: 4px 8px 8px;
+}
+
+.ui-theme-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ui-theme-picker-list > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 12px;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  transition: background-color 150ms ease, transform 200ms ease;
+  touch-action: manipulation;
+}
+
+.ui-theme-picker-list > button:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.ui-theme-picker-list > button:active {
+  transform: scale(0.98);
+}
+
+.ui-theme-picker-list > button[data-active="true"] {
+  background: rgba(16, 185, 129, 0.16);
+}
+
+.ui-theme-picker-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ui-theme-picker-swatch[data-swatch="classic"] {
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+.ui-theme-picker-swatch[data-swatch="glass-turf"] {
+  background: linear-gradient(135deg, #0b2a22, #10b981);
+  border: 1px solid rgba(110, 231, 183, 0.5);
+}
+
+.ui-theme-picker-swatch[data-swatch="neo"] {
+  background: linear-gradient(135deg, #ffffff 0%, #ffffff 48%, #c6ff3d 52%, #c6ff3d 100%);
+  border: 1px solid rgba(11, 11, 15, 0.12);
+}
+
+.ui-theme-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ui-theme-picker-text strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ui-theme-picker-text small {
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.ui-theme-picker-check {
+  font-weight: 800;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 150ms ease, transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ui-theme-picker-list > button[data-active="true"] .ui-theme-picker-check {
+  opacity: 1;
+  transform: none;
+  color: #34d399;
+}
+
+html[data-ui="glass-turf"] .ui-theme-picker {
+  background: rgba(10, 28, 23, 0.94);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+/* Smooth cross-fade when switching between any two themes */
+html[data-theme-switching]::view-transition-old(root),
+html[data-theme-switching]::view-transition-new(root) {
+  animation-duration: 420ms;
+  animation-timing-function: ease;
+}
+
+/* --------------------------------------------------------------------------
+   1. Tokens, canvas & typography
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] {
+  color-scheme: light;
+  --neo-bg: #f4f5f7;
+  --neo-surface: #ffffff;
+  --neo-inset: #f1f2f5;
+  --neo-soft: #eaecf0;
+  --neo-soft-hover: #e1e4ea;
+  --neo-ink: #0b0b0f;
+  --neo-ink-2: #2b303a;
+  --neo-ink-3: #5e6472;
+  --neo-ink-4: #8b919d;
+  --neo-line: rgba(11, 11, 15, 0.08);
+  --neo-line-strong: rgba(11, 11, 15, 0.14);
+
+  --neo-lime: #c6ff3d;
+  --neo-lime-hover: #b9f529;
+  --neo-lime-text: #4d7c0f;
+  --neo-lime-tint: #eef9d9;
+  --neo-lime-glow: rgba(150, 220, 20, 0.55);
+
+  --neo-blue: #0a84ff;
+  --neo-amber: #ffb020;
+  --neo-rose: #ff3b5c;
+  --neo-violet: #7c3aed;
+
+  --neo-radius-card: 22px;
+  --neo-radius-ctrl: 14px;
+  --neo-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -10px rgba(16, 24, 40, 0.12);
+  --neo-shadow-float: 0 18px 40px -12px rgba(11, 11, 15, 0.35), 0 4px 10px rgba(11, 11, 15, 0.08);
+
+  --neo-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --neo-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Role tokens */
+  --neo-gk: #7c3aed;
+  --neo-def: #0284c7;
+  --neo-mid: #d97706;
+  --neo-att: #e11d48;
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  html[data-ui="neo"] {
+    --neo-spring: linear(
+      0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%,
+      1.067, 1.099 24.3%, 1.108 26%, 1.103 27.9%, 1.06 32.8%, 1.026 37%,
+      1.003 41.6%, 0.992 47.1%, 1 60%, 1
+    );
+  }
+}
+
+html[data-ui="neo"] body {
+  background-color: var(--neo-bg);
+  background-image: radial-gradient(ellipse 90% 38% at 50% -8%, rgba(198, 255, 61, 0.28) 0%, transparent 70%);
+  background-repeat: no-repeat;
+  color: var(--neo-ink);
+  font-family: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-ui="neo"] ::selection {
+  background: var(--neo-lime);
+  color: var(--neo-ink);
+}
+
+/* --------------------------------------------------------------------------
+   2. Header (frosted light context bar)
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] header {
+  background: rgba(244, 245, 247, 0.82);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--neo-line);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  html[data-ui="neo"] header {
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+html[data-ui="neo"] header > div + div {
+  border-top-color: transparent !important;
+}
+
+html[data-ui="neo"] header .font-bold.text-emerald-400 {
+  color: var(--neo-ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+html[data-ui="neo"] header [role="img"][aria-label="MatchDay Ready Logo"] {
+  border-color: var(--neo-lime);
+  box-shadow: 0 0 0 3px rgba(198, 255, 61, 0.35);
+}
+
+html[data-ui="neo"] header :is(#clubTitleBadge, #coachProfileBadge, #syncStatus, #clubSwitcherSelect) {
+  border-radius: 999px;
+  padding-inline: 0.6rem;
+}
+
+html[data-ui="neo"] header #teamSelector {
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  border: 1px solid var(--neo-line);
+  border-radius: 999px;
+  min-height: 34px;
+  font-weight: 800;
+  box-shadow: var(--neo-shadow-card);
+}
+
+html[data-ui="neo"] header #uiThemeToggleBtn {
+  background: var(--neo-ink);
+  color: var(--neo-lime);
+  border: 0;
+  border-radius: 999px;
+  min-height: 30px;
+  padding-inline: 0.7rem;
+}
+
+html[data-ui="neo"] .ui-theme-picker {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--neo-ink);
+  border: 1px solid var(--neo-line);
+  border-radius: 22px;
+  box-shadow: var(--neo-shadow-float);
+}
+
+html[data-ui="neo"] .ui-theme-picker-list > button:hover {
+  background: var(--neo-inset);
+}
+
+html[data-ui="neo"] .ui-theme-picker-list > button[data-active="true"] {
+  background: var(--neo-lime-tint);
+}
+
+html[data-ui="neo"] .ui-theme-picker-list > button[data-active="true"] .ui-theme-picker-check {
+  color: var(--neo-lime-text);
+}
+
+/* --------------------------------------------------------------------------
+   3. Surface / text / border remapping (scoped; export card excluded)
+   -------------------------------------------------------------------------- */
+
+/* Cards */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="bg-slate-800"] {
+  background: var(--neo-surface);
+  border-color: transparent;
+  box-shadow: var(--neo-shadow-card);
+}
+
+html[data-ui="neo"] main [class*="bg-slate-800"]:not(button):not(span):not(select):not(.rounded-full) {
+  border-radius: var(--neo-radius-card);
+}
+
+/* Inset rows / wells */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="bg-slate-900"], [class*="bg-slate-950"]) {
+  background: var(--neo-inset);
+  border-color: transparent;
+}
+
+/* Neutral chips / secondary surfaces */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="bg-slate-700"], [class*="bg-slate-600"]) {
+  background: var(--neo-soft);
+  border-color: transparent;
+  color: var(--neo-ink);
+}
+
+/* Text */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.text-white, .text-slate-100, .text-slate-200, .hover\:text-white:hover, .hover\:text-slate-200:hover) {
+  color: var(--neo-ink);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) .text-slate-300 {
+  color: var(--neo-ink-2);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) .text-slate-400 {
+  color: var(--neo-ink-3);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) .text-slate-500 {
+  color: var(--neo-ink-4);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="text-emerald-"], [class*="text-green-"], [class*="text-lime-"]) {
+  color: var(--neo-lime-text);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-sky-"] {
+  color: #0369a1;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-amber-"] {
+  color: #b45309;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-yellow-"] {
+  color: #a16207;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-rose-"] {
+  color: #e11d48;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-purple-"] {
+  color: #7e22ce;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="text-indigo-"] {
+  color: #4338ca;
+}
+
+/* Borders */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="border-slate-"], [class*="divide-slate-"] > *) {
+  border-color: var(--neo-line);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="border-emerald-"] {
+  border-color: rgba(77, 124, 15, 0.28);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="border-sky-"] {
+  border-color: rgba(3, 105, 161, 0.22);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="border-amber-"], [class*="border-yellow-"]) {
+  border-color: rgba(180, 83, 9, 0.25);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) [class*="border-rose-"] {
+  border-color: rgba(225, 29, 72, 0.25);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is([class*="border-purple-"], [class*="border-indigo-"]) {
+  border-color: rgba(126, 34, 206, 0.22);
+}
+
+/* Tinted banners & badges */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-emerald-500\/20, .bg-emerald-600\/20, .bg-emerald-600\/25, .bg-emerald-600\/30, [class*="bg-emerald-950"], [class*="bg-emerald-900"], [class*="bg-emerald-800"]) {
+  background: var(--neo-lime-tint);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-sky-500\/20, .bg-sky-600\/30, [class*="bg-sky-950"]) {
+  background: #e7f3fc;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-amber-500\/15, .bg-amber-500\/20, [class*="bg-amber-950"], [class*="bg-amber-900"], .bg-yellow-500\/20) {
+  background: #fff3dc;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-rose-500\/20, .bg-rose-600\/20, .bg-rose-600\/30, [class*="bg-rose-950"]) {
+  background: #ffe9ed;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-purple-500\/20, .bg-purple-600\/25, .bg-indigo-500\/20) {
+  background: #f1ebff;
+}
+
+html[data-ui="neo"] main :is(.bg-emerald-500\/20, [class*="bg-emerald-950"], .bg-sky-500\/20, [class*="bg-sky-950"], .bg-amber-500\/15, .bg-amber-500\/20, [class*="bg-amber-950"], .bg-rose-500\/20, [class*="bg-rose-950"]).rounded-lg {
+  border-radius: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   4. Buttons
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(button, label, a):is([class*="bg-slate-700"], [class*="bg-slate-600"]):hover {
+  background: var(--neo-soft-hover);
+}
+
+html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button:is(.rounded, .rounded-lg) {
+  border-radius: var(--neo-radius-ctrl);
+}
+
+/* Primary: electric lime with ink text */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-emerald-600, .bg-emerald-500) {
+  background: var(--neo-lime);
+  color: var(--neo-ink);
+  border-color: transparent;
+  box-shadow: 0 8px 18px -10px var(--neo-lime-glow);
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-emerald-600, .bg-emerald-500):is(button):hover {
+  background: var(--neo-lime-hover);
+}
+
+/* Strong secondary: ink */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-indigo-600, .bg-indigo-600\/80, .bg-indigo-500) {
+  background: var(--neo-ink);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* Accent solids */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-sky-600, .bg-sky-500) {
+  background: var(--neo-blue);
+  color: #ffffff;
+  border-color: transparent;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-amber-600, .bg-amber-600\/80, .bg-amber-500, .bg-amber-700) {
+  background: var(--neo-amber);
+  color: var(--neo-ink);
+  border-color: transparent;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-rose-600, .bg-rose-600\/80, .bg-rose-600\/90, .bg-rose-500) {
+  background: var(--neo-rose);
+  color: #ffffff;
+  border-color: transparent;
+}
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-purple-600, .bg-purple-500) {
+  background: var(--neo-violet);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+/* Text classes inside solids inherit the solid's foreground */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(.bg-indigo-600, .bg-indigo-500, .bg-sky-600, .bg-sky-500, .bg-rose-600, .bg-rose-500, .bg-purple-600, .bg-purple-500, .bg-emerald-600, .bg-emerald-500, .bg-amber-600, .bg-amber-500) :is(.text-white, [class*="text-slate-"], [class*="text-emerald-"]) {
+  color: inherit;
+}
+
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button:is(.bg-indigo-600, .bg-sky-600, .bg-rose-600, .bg-purple-600, .bg-amber-600):hover {
+  filter: brightness(1.06);
+}
+
+/* Google sign-in button */
+html[data-ui="neo"] #authModal button.bg-white {
+  border: 1px solid var(--neo-line-strong);
+  border-radius: var(--neo-radius-ctrl);
+  box-shadow: none;
+}
+
+/* The 3-button action grid is replaced by the floating speed-dial in Neo */
+html[data-ui="neo"] #pitchActionToolbar > .grid {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   5. Inputs & form controls
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  background: var(--neo-inset);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--neo-ink);
+  transition: border-color 150ms ease, box-shadow 200ms ease, background-color 150ms ease;
+}
+
+html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not([class*="py-0"]) {
+  min-height: 36px;
+}
+
+html[data-ui="neo"] :is(input, textarea)::placeholder {
+  color: #9aa0ab;
+}
+
+html[data-ui="neo"] :is(header, main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) :is(input, select, textarea):focus {
+  outline: none;
+  background: var(--neo-surface);
+  border-color: #84cc16;
+  box-shadow: 0 0 0 4px rgba(198, 255, 61, 0.45);
+}
+
+html[data-ui="neo"] input[type="file"]::file-selector-button {
+  background: var(--neo-ink);
+  color: #ffffff;
+  border-radius: 10px;
+}
+
+html[data-ui="neo"] :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: #65a30d;
+}
+
+/* --------------------------------------------------------------------------
+   6. Segmented controls
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] #periodTabsGrid {
+  background: var(--neo-soft);
+  padding: 4px;
+  border-radius: 16px;
+  gap: 4px;
+}
+
+html[data-ui="neo"] #periodTabsGrid .q-btn {
+  min-height: 36px;
+  background: transparent;
+  color: var(--neo-ink-3);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  font-weight: 700;
+  transition: background-color 250ms var(--neo-ease), color 200ms ease, transform 350ms var(--neo-spring), box-shadow 250ms ease;
+}
+
+html[data-ui="neo"] #periodTabsGrid .q-btn[data-active="true"] {
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 12px -4px rgba(16, 24, 40, 0.18);
+}
+
+html[data-ui="neo"] #periodTabsGrid .q-btn[data-active="true"]::after {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 3px;
+  margin: 2px auto 0;
+  border-radius: 999px;
+  background: var(--neo-lime);
+}
+
+html[data-ui="neo"] :is(#adminSubtabBar, #authModal .bg-slate-900.p-1, #accessGateModal .bg-slate-900.p-1) {
+  background: var(--neo-soft);
+  border: 0;
+  box-shadow: none;
+  border-radius: 16px;
+  padding: 4px;
+}
+
+html[data-ui="neo"] #adminSubtabBar button {
+  border-radius: 12px;
+  transition: background-color 250ms var(--neo-ease), color 200ms ease;
+}
+
+html[data-ui="neo"] #adminSubtabBar button[class*="bg-slate-9"],
+html[data-ui="neo"] :is(#authTabLogin, #authTabSignup, #onboardingTabJoin, #onboardingTabCreate):not(.bg-emerald-600) {
+  background: transparent;
+  color: var(--neo-ink-3);
+  box-shadow: none;
+}
+
+html[data-ui="neo"] :is(#authTabLogin, #authTabSignup, #onboardingTabJoin, #onboardingTabCreate) {
+  border-radius: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   7. Hero timer card (dark "balance" card)
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] main #timerCard {
+  background: var(--neo-ink);
+  background-image: radial-gradient(ellipse 80% 120% at 100% 0%, rgba(198, 255, 61, 0.16) 0%, transparent 60%);
+  color: #ffffff;
+  border: 0;
+  border-radius: 24px;
+  padding: 16px;
+  box-shadow: 0 20px 40px -18px rgba(11, 11, 15, 0.55);
+}
+
+html[data-ui="neo"] main #timerCard :is(.text-white, [class*="text-slate-"]) {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+html[data-ui="neo"] main #timerCard #timerTargetReadout {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+html[data-ui="neo"] main #timerCard #timerDigitalReadout {
+  font-family: inherit;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-ui="neo"] main #timerCard #timerDigitalReadout[class*="text-amber"] {
+  color: #ffc247;
+}
+
+html[data-ui="neo"] main #timerCard #timerDigitalReadout[class*="text-rose"] {
+  color: #ff5c7a;
+}
+
+html[data-ui="neo"] main #timerCard [class*="text-amber-"] {
+  color: #ffc247;
+}
+
+html[data-ui="neo"] main #timerCard #timerPeriodBadge {
+  background: rgba(198, 255, 61, 0.14);
+  color: var(--neo-lime);
+  border: 0;
+  border-radius: 999px;
+  padding-inline: 0.65rem;
+}
+
+html[data-ui="neo"] main #timerCard button:is([class*="bg-slate-7"], [class*="bg-slate-6"]) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-radius: 999px;
+}
+
+html[data-ui="neo"] main #timerCard #timerToggleBtn {
+  border-radius: 999px;
+  min-height: 36px;
+  padding-inline: 1rem;
+}
+
+html[data-ui="neo"] main #timerCard #timerProgressTrack {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 0;
+  margin-top: 14px;
+}
+
+html[data-ui="neo"] main #timerCard #timerProgressBar.bg-emerald-500 {
+  background: var(--neo-lime);
+  box-shadow: 0 0 12px rgba(198, 255, 61, 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   8. Tactical pitch & player chips
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] #pitchContainer {
+  background-color: #1f9d4c;
+  background-image:
+    radial-gradient(ellipse 100% 100% at 50% 50%, transparent 60%, rgba(4, 40, 18, 0.28) 100%),
+    repeating-linear-gradient(0deg, #22a652 0px, #22a652 40px, #1d9447 40px, #1d9447 80px);
+  border: 0;
+  border-radius: 26px;
+  box-shadow: 0 22px 40px -20px rgba(18, 80, 40, 0.65), inset 0 0 0 3px rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+
+html[data-ui="neo"] .glass-pitch-marking {
+  display: block;
+}
+
+html[data-ui="neo"] #pitchSlots .pitch-node {
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--neo-surface);
+  box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.55);
+  transition: transform 350ms var(--neo-spring);
+}
+
+html[data-ui="neo"] #pitchSlots .pitch-node:active {
+  transform: scale(0.96);
+}
+
+html[data-ui="neo"] #pitchSlots .pitch-node-badge {
+  border-radius: 0;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+html[data-ui="neo"] #pitchSlots .pitch-node-badge[data-role="GK"] { background: var(--neo-gk); }
+html[data-ui="neo"] #pitchSlots .pitch-node-badge[data-role="DEF"] { background: var(--neo-def); }
+html[data-ui="neo"] #pitchSlots .pitch-node-badge[data-role="MID"] { background: var(--neo-mid); }
+html[data-ui="neo"] #pitchSlots .pitch-node-badge[data-role="ATT"] { background: var(--neo-att); }
+
+html[data-ui="neo"] #pitchSlots .pitch-slot-select {
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  min-height: 32px;
+}
+
+html[data-ui="neo"] #pitchSlots .pitch-slot-select:focus {
+  box-shadow: inset 0 0 0 2px #84cc16;
+}
+
+/* --------------------------------------------------------------------------
+   9. Role colours (bench, splitter, stats)
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] #subsBench > span {
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px var(--neo-line);
+}
+
+html[data-ui="neo"] .role-pill { border-radius: 6px; font-weight: 800; }
+html[data-ui="neo"] main .role-pill[data-role="GK"] { background: #f1ebff; color: var(--neo-gk); }
+html[data-ui="neo"] main .role-pill[data-role="DEF"] { background: #e3f2fc; color: var(--neo-def); }
+html[data-ui="neo"] main .role-pill[data-role="MID"] { background: #fff1db; color: #b45309; }
+html[data-ui="neo"] main .role-pill[data-role="ATT"] { background: #ffe6eb; color: var(--neo-att); }
+
+html[data-ui="neo"] #view-stats table thead {
+  background: var(--neo-inset);
+}
+
+html[data-ui="neo"] #view-stats th[data-role="GK"] { color: var(--neo-gk); }
+html[data-ui="neo"] #view-stats th[data-role="DEF"] { color: var(--neo-def); }
+html[data-ui="neo"] #view-stats th[data-role="MID"] { color: var(--neo-mid); }
+html[data-ui="neo"] #view-stats th[data-role="ATT"] { color: var(--neo-att); }
+
+html[data-ui="neo"] #view-stats td[data-nonzero="true"] { font-weight: 700; }
+html[data-ui="neo"] #view-stats td[data-role="GK"][data-nonzero="true"] { color: var(--neo-gk); }
+html[data-ui="neo"] #view-stats td[data-role="DEF"][data-nonzero="true"] { color: var(--neo-def); }
+html[data-ui="neo"] #view-stats td[data-role="MID"][data-nonzero="true"] { color: var(--neo-mid); }
+html[data-ui="neo"] #view-stats td[data-role="ATT"][data-nonzero="true"] { color: var(--neo-att); }
+
+html[data-ui="neo"] #view-stats tbody tr {
+  transition: background-color 150ms ease;
+}
+
+html[data-ui="neo"] #view-stats tbody tr:hover {
+  background: rgba(198, 255, 61, 0.12);
+}
+
+/* --------------------------------------------------------------------------
+   10. Bottom sheets (modals)
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
+  background: rgba(11, 11, 15, 0.38);
+  align-items: flex-end;
+  padding: 0;
+  animation: neo-fade-in 240ms ease both;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+}
+
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div {
+  position: relative;
+  width: 100%;
+  max-width: 30rem;
+  margin: auto auto 0;
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--neo-surface);
+  color: var(--neo-ink);
+  border: 0;
+  border-radius: 28px 28px 0 0;
+  padding: 10px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -16px 48px -12px rgba(11, 11, 15, 0.3);
+  animation: neo-sheet-in 460ms var(--neo-ease) both;
+}
+
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div::before {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 5px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: #d9dce2;
+}
+
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+html[data-ui="neo"] :is(#swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) > div > div:last-child > button,
+html[data-ui="neo"] :is(#swapModal, #eventModal) > div button {
+  min-height: 44px;
+}
+
+@keyframes neo-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes neo-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   11. Floating dock + sliding indicator
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] #bottomNav {
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  max-width: 26rem;
+  margin-inline: auto;
+  padding-bottom: 0;
+  background: rgba(11, 11, 15, 0.92);
+  border: 0;
+  border-radius: 26px;
+  box-shadow: var(--neo-shadow-float);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  html[data-ui="neo"] #bottomNav {
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+  }
+}
+
+html[data-ui="neo"] #bottomNav > div {
+  position: relative;
+  padding: 6px;
+  gap: 4px;
+}
+
+html[data-ui="neo"] #bottomNav button {
+  position: relative;
+  z-index: 1;
+  min-height: 52px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: #9ba1ad;
+  font-weight: 700;
+  transition: color 250ms ease, transform 350ms var(--neo-spring);
+}
+
+html[data-ui="neo"] #bottomNav button[aria-current="page"] {
+  color: var(--neo-ink);
+}
+
+html[data-ui="neo"] #bottomNav button:active {
+  transform: scale(0.94);
+}
+
+html[data-ui="neo"] #neoNavIndicator {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 20px;
+  background: var(--neo-lime);
+  box-shadow: 0 6px 18px -6px rgba(198, 255, 61, 0.7);
+  pointer-events: none;
+  transition:
+    transform 520ms var(--neo-spring),
+    width 520ms var(--neo-spring),
+    background-color 250ms ease,
+    opacity 200ms ease;
+}
+
+html[data-ui="neo"] #neoNavIndicator[data-tab="nav-admin"] {
+  background: #c4b5fd;
+  box-shadow: 0 6px 18px -6px rgba(167, 139, 250, 0.7);
+}
+
+/* No-JS fallback: highlight active tab directly */
+html[data-ui="neo"] #bottomNav:not(:has(#neoNavIndicator)) button[aria-current="page"] {
+  background: var(--neo-lime);
+}
+
+/* --------------------------------------------------------------------------
+   12. Speed-dial FAB + floating mini timer
+   -------------------------------------------------------------------------- */
+html[data-ui="neo"] .neo-only {
+  display: block;
+}
+
+html[data-ui="neo"]:not([data-view="pitch"]) :is(#neoFab, #neoMiniTimer),
+html[data-ui="neo"] .neo-fab[data-empty="true"] {
+  display: none;
+}
+
+.neo-fab-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(244, 245, 247, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .neo-fab-scrim {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+}
+
+.neo-fab[data-open="true"] .neo-fab-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.neo-fab-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  z-index: 42;
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: var(--neo-lime);
+  color: var(--neo-ink);
+  box-shadow: 0 14px 28px -10px rgba(120, 190, 10, 0.85), 0 2px 6px rgba(11, 11, 15, 0.12);
+  transition: background-color 250ms ease, color 250ms ease, transform 400ms var(--neo-spring), border-radius 400ms var(--neo-spring);
+  touch-action: manipulation;
+}
+
+.neo-fab-toggle:active {
+  transform: scale(0.92);
+}
+
+.neo-fab[data-open="true"] .neo-fab-toggle {
+  background: var(--neo-ink);
+  color: var(--neo-lime);
+  border-radius: 29px;
+}
+
+.neo-fab-plus {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  transition: transform 450ms var(--neo-spring);
+}
+
+.neo-fab-plus::before,
+.neo-fab-plus::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 3px;
+  border-radius: 3px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.neo-fab-plus::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.neo-fab[data-open="true"] .neo-fab-plus {
+  transform: rotate(135deg);
+}
+
+.neo-fab-actions {
+  position: fixed;
+  right: 21px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 158px);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.neo-fab-actions > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(18px) scale(0.85);
+  transform-origin: right center;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease calc((3 - var(--i, 0)) * 35ms),
+    transform 420ms var(--neo-spring) calc((3 - var(--i, 0)) * 35ms);
+  touch-action: manipulation;
+}
+
+.neo-fab-actions > button[hidden] {
+  display: none;
+}
+
+.neo-fab[data-open="true"] .neo-fab-actions > button {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.neo-fab-label {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0b0b0f;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 6px 16px -8px rgba(11, 11, 15, 0.3), 0 0 0 1px rgba(11, 11, 15, 0.05);
+}
+
+.neo-fab-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 22px -10px rgba(11, 11, 15, 0.4), 0 0 0 1px rgba(11, 11, 15, 0.05);
+  transition: transform 300ms var(--neo-spring);
+}
+
+.neo-fab-actions > button:active .neo-fab-icon {
+  transform: scale(0.9);
+}
+
+/* Floating mini timer pill */
+.neo-mini-timer {
+  position: fixed;
+  left: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 94px);
+  z-index: 39;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #0b0b0f;
+  color: #ffffff;
+  box-shadow: 0 16px 32px -12px rgba(11, 11, 15, 0.55);
+  opacity: 0;
+  transform: translateY(24px) scale(0.9);
+  pointer-events: none;
+  transition: opacity 220ms ease, transform 480ms var(--neo-spring);
+}
+
+.neo-mini-timer[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.neo-mini-timer-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  color: inherit;
+  background: transparent;
+  border-radius: 999px;
+}
+
+.neo-mini-timer-period {
+  position: relative;
+  font-size: 11px;
+  font-weight: 800;
+  color: #c6ff3d;
+  padding-left: 12px;
+}
+
+.neo-mini-timer-period::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.neo-mini-timer[data-running="true"] .neo-mini-timer-period::before {
+  background: #c6ff3d;
+  animation: neo-pulse 1.4s ease-in-out infinite;
+}
+
+.neo-mini-timer-readout {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.neo-mini-timer[data-state="mid"] .neo-mini-timer-readout { color: #ffc247; }
+.neo-mini-timer[data-state="full"] .neo-mini-timer-readout { color: #ff5c7a; }
+
+.neo-mini-timer-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #c6ff3d;
+  color: #0b0b0f;
+  font-size: 13px;
+  font-weight: 800;
+  transition: transform 300ms var(--neo-spring);
+}
+
+.neo-mini-timer-toggle[hidden] {
+  display: none;
+}
+
+.neo-mini-timer-toggle:active {
+  transform: scale(0.9);
+}
+
+@keyframes neo-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(198, 255, 61, 0.6); }
+  50% { box-shadow: 0 0 0 5px rgba(198, 255, 61, 0); }
+}
+
+/* --------------------------------------------------------------------------
+   13. Motion
+   -------------------------------------------------------------------------- */
+
+/* Directional tab slides (names only applied during a nav transition) */
+html[data-ui="neo"][data-nav-dir] main {
+  view-transition-name: neo-main;
+}
+
+html[data-ui="neo"][data-nav-dir] #bottomNav {
+  view-transition-name: neo-dock;
+}
+
+html[data-ui="neo"][data-nav-dir] header {
+  view-transition-name: neo-header;
+}
+
+html[data-nav-dir]::view-transition-group(neo-main) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html[data-nav-dir="forward"]::view-transition-old(neo-main) {
+  animation: neo-out-left 260ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+html[data-nav-dir="forward"]::view-transition-new(neo-main) {
+  animation: neo-in-right 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+html[data-nav-dir="back"]::view-transition-old(neo-main) {
+  animation: neo-out-right 260ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+html[data-nav-dir="back"]::view-transition-new(neo-main) {
+  animation: neo-in-left 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes neo-out-left {
+  to { opacity: 0; transform: translateX(-10%) scale(0.98); }
+}
+
+@keyframes neo-in-right {
+  from { opacity: 0; transform: translateX(14%); }
+}
+
+@keyframes neo-out-right {
+  to { opacity: 0; transform: translateX(10%) scale(0.98); }
+}
+
+@keyframes neo-in-left {
+  from { opacity: 0; transform: translateX(-14%); }
+}
+
+/* Smooth accordions (progressive enhancement) */
+html[data-ui="neo"] main details > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+html[data-ui="neo"] main details > summary::-webkit-details-marker {
+  display: none;
+}
+
+@supports selector(::details-content) {
+  html[data-ui="neo"] {
+    interpolate-size: allow-keywords;
+  }
+
+  html[data-ui="neo"] main details::details-content {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition:
+      block-size 380ms var(--neo-ease),
+      opacity 260ms ease,
+      content-visibility 380ms allow-discrete;
+  }
+
+  html[data-ui="neo"] main details[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
+/* Tactile press feedback */
+html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button {
+  transition:
+    transform 350ms var(--neo-spring),
+    background-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    filter 200ms ease;
+  touch-action: manipulation;
+}
+
+html[data-ui="neo"] :is(main, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Gentle entrance for each view's cards on first paint */
+html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > * {
+  animation: neo-rise 420ms var(--neo-ease) both;
+}
+
+html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(2) { animation-delay: 30ms; }
+html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(3) { animation-delay: 60ms; }
+html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(4) { animation-delay: 90ms; }
+html[data-ui="neo"] main > [id^="view-"]:not(.hidden) > *:nth-child(n + 5) { animation-delay: 120ms; }
+
+@keyframes neo-rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+/* Focus visibility */
+html[data-ui="neo"] :is(button, summary, [role="radio"]):focus-visible {
+  outline: 3px solid #84cc16;
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   14. Accessibility preferences
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="neo"] *,
+  html[data-ui="neo"] *::before,
+  html[data-ui="neo"] *::after,
+  .ui-theme-picker {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-ui="neo"] :is(header, #bottomNav, .neo-fab-scrim, #swapModal, #eventModal, #betaImportModal, #authModal, #accessGateModal) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  html[data-ui="neo"] header {
+    background: var(--neo-bg);
+  }
+
+  html[data-ui="neo"] #bottomNav {
+    background: var(--neo-ink);
+  }
+}
